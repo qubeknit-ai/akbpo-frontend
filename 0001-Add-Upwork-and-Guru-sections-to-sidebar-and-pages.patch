@@ -1,0 +1,2091 @@
+From a647e1b644058b7bd608b45affe9098a50b446ed Mon Sep 17 00:00:00 2001
+From: Nicolas Alexandrou <nicolasalexandrou12@gmail.com>
+Date: Wed, 1 Apr 2026 12:48:48 +0200
+Subject: [PATCH] Add Upwork and Guru sections to sidebar and pages
+
+- Added Upwork section: Projects, Bids, Auto Bid, Settings
+- Added Guru section: Projects, Quotes, Auto Quote, Settings
+- Sidebar collapsible sections with platform-specific icons/colours
+- Pages ready for backend endpoints (graceful not-connected state)
+- Mirrors existing Freelancer page patterns
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ src/App.jsx                         |  49 +++++
+ src/components/Sidebar.jsx          | 181 ++++++++++++++----
+ src/pages/guru/GuruAutoBid.jsx      | 185 +++++++++++++++++++
+ src/pages/guru/GuruBids.jsx         | 159 ++++++++++++++++
+ src/pages/guru/GuruProjects.jsx     | 227 +++++++++++++++++++++++
+ src/pages/guru/GuruSettings.jsx     | 265 ++++++++++++++++++++++++++
+ src/pages/upwork/UpworkAutoBid.jsx  | 200 ++++++++++++++++++++
+ src/pages/upwork/UpworkBids.jsx     | 181 ++++++++++++++++++
+ src/pages/upwork/UpworkProjects.jsx | 226 +++++++++++++++++++++++
+ src/pages/upwork/UpworkSettings.jsx | 277 ++++++++++++++++++++++++++++
+ 10 files changed, 1914 insertions(+), 36 deletions(-)
+ create mode 100644 src/pages/guru/GuruAutoBid.jsx
+ create mode 100644 src/pages/guru/GuruBids.jsx
+ create mode 100644 src/pages/guru/GuruProjects.jsx
+ create mode 100644 src/pages/guru/GuruSettings.jsx
+ create mode 100644 src/pages/upwork/UpworkAutoBid.jsx
+ create mode 100644 src/pages/upwork/UpworkBids.jsx
+ create mode 100644 src/pages/upwork/UpworkProjects.jsx
+ create mode 100644 src/pages/upwork/UpworkSettings.jsx
+
+diff --git a/src/App.jsx b/src/App.jsx
+index 9daa1f8..634b4a6 100644
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@ -20,6 +20,17 @@ import FreelancerBids from './pages/freelancer/FreelancerBids'
+ import FreelancerMessages from './pages/freelancer/FreelancerMessages'
+ import AutoBidLogs from './pages/freelancer/AutoBidLogs'
+ import FreelancerSettings from './pages/freelancer/FreelancerSettings'
++
++import UpworkProjects from './pages/upwork/UpworkProjects'
++import UpworkBids from './pages/upwork/UpworkBids'
++import UpworkAutoBid from './pages/upwork/UpworkAutoBid'
++import UpworkSettings from './pages/upwork/UpworkSettings'
++
++import GuruProjects from './pages/guru/GuruProjects'
++import GuruBids from './pages/guru/GuruBids'
++import GuruAutoBid from './pages/guru/GuruAutoBid'
++import GuruSettings from './pages/guru/GuruSettings'
++
+ import Login from './pages/Login'
+ import Signup from './pages/Signup'
+ 
+@@ -231,6 +242,25 @@ function App() {
+         return { title: 'Freelancer Settings', description: 'Manage your Freelancer.com connection and automation' }
+       case 'freelancer-logs':
+         return { title: 'Auto Bidding', description: '' }
++
++      case 'upwork-projects':
++        return { title: 'Upwork Projects', description: '' }
++      case 'upwork-bids':
++        return { title: 'Upwork Bids', description: '' }
++      case 'upwork-autobid':
++        return { title: 'Upwork Auto Bid', description: '' }
++      case 'upwork-settings':
++        return { title: 'Upwork Settings', description: 'Manage your Upwork connection and automation' }
++
++      case 'guru-projects':
++        return { title: 'Guru Projects', description: '' }
++      case 'guru-bids':
++        return { title: 'Guru Quotes', description: '' }
++      case 'guru-autobid':
++        return { title: 'Guru Auto Quote', description: '' }
++      case 'guru-settings':
++        return { title: 'Guru Settings', description: 'Manage your Guru.com connection and automation' }
++
+       default:
+         return { title: 'Dashboard', description: 'Overview of your lead management' }
+     }
+@@ -279,6 +309,25 @@ function App() {
+         return <AutoBidLogs />
+       case 'freelancer-settings':
+         return <FreelancerSettings />
++
++      case 'upwork-projects':
++        return <UpworkProjects />
++      case 'upwork-bids':
++        return <UpworkBids />
++      case 'upwork-autobid':
++        return <UpworkAutoBid />
++      case 'upwork-settings':
++        return <UpworkSettings />
++
++      case 'guru-projects':
++        return <GuruProjects />
++      case 'guru-bids':
++        return <GuruBids />
++      case 'guru-autobid':
++        return <GuruAutoBid />
++      case 'guru-settings':
++        return <GuruSettings />
++
+       default:
+         return <Leads refreshTrigger={refreshLeads} />
+     }
+diff --git a/src/components/Sidebar.jsx b/src/components/Sidebar.jsx
+index 0e944b6..c97e810 100644
+--- a/src/components/Sidebar.jsx
++++ b/src/components/Sidebar.jsx
+@@ -23,6 +23,14 @@ const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
+     const cached = localStorage.getItem('freelancerMenuExpanded')
+     return cached === 'true'
+   })
++  const [upworkExpanded, setUpworkExpanded] = useState(() => {
++    const cached = localStorage.getItem('upworkMenuExpanded')
++    return cached === 'true'
++  })
++  const [guruExpanded, setGuruExpanded] = useState(() => {
++    const cached = localStorage.getItem('guruMenuExpanded')
++    return cached === 'true'
++  })
+ 
+   const sidebarRef = useRef(null)
+ 
+@@ -96,6 +104,22 @@ const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
+     { id: 'freelancer-settings', label: 'Settings', icon: Settings },
+   ]
+ 
++  // Upwork sub-menu items
++  const upworkMenuItems = [
++    { id: 'upwork-projects', label: 'Projects', icon: FolderOpen },
++    { id: 'upwork-bids', label: 'Bids', icon: Briefcase },
++    { id: 'upwork-autobid', label: 'Auto Bid', icon: Zap },
++    { id: 'upwork-settings', label: 'Settings', icon: Settings },
++  ]
++
++  // Guru sub-menu items
++  const guruMenuItems = [
++    { id: 'guru-projects', label: 'Projects', icon: FolderOpen },
++    { id: 'guru-bids', label: 'Quotes', icon: Briefcase },
++    { id: 'guru-autobid', label: 'Auto Quote', icon: Zap },
++    { id: 'guru-settings', label: 'Settings', icon: Settings },
++  ]
++
+   // Admin sub-menu items
+   const adminMenuItems = [
+     { id: 'admin-dashboard', label: 'Dashboard', icon: LayoutDashboard },
+@@ -121,6 +145,18 @@ const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
+     localStorage.setItem('freelancerMenuExpanded', newState.toString())
+   }
+ 
++  const toggleUpworkMenu = () => {
++    const newState = !upworkExpanded
++    setUpworkExpanded(newState)
++    localStorage.setItem('upworkMenuExpanded', newState.toString())
++  }
++
++  const toggleGuruMenu = () => {
++    const newState = !guruExpanded
++    setGuruExpanded(newState)
++    localStorage.setItem('guruMenuExpanded', newState.toString())
++  }
++
+   return (
+     <>
+       {/* Mobile Menu Toggle Button - Only show when menu is closed */}
+@@ -193,42 +229,115 @@ const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
+ 
+                 {/* Freelancer Section - Show after Leads */}
+                 {item.id === 'leads' && (
+-                  <div className="mt-1">
+-                    <button
+-                      onClick={toggleFreelancerMenu}
+-                      className="w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl transition-all text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
+-                    >
+-                      <div className="flex items-center gap-2.5">
+-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+-                          <path d="M14.096 3.076l1.634 2.292L24 3.076M5.503 20.924l4.474-4.374-2.692-2.89m6.133-10.584L11.027 5.23l4.022.15M4.124 3.077l.857 1.76 4.734.294m-3.058 7.072l3.497-6.522L0 5.13" />
+-                        </svg>
+-                        <span className="text-sm font-medium">Freelancer</span>
+-                      </div>
+-                      {freelancerExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+-                    </button>
+-
+-                    {/* Freelancer Sub-menu */}
+-                    {freelancerExpanded && (
+-                      <div className="ml-4 mt-1 space-y-1">
+-                        {freelancerMenuItems.map((item) => {
+-                          const Icon = item.icon
+-                          const isActive = currentPage === item.id
+-                          return (
+-                            <button
+-                              key={item.id}
+-                              onClick={() => handleMenuClick(item.id)}
+-                              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-sm ${isActive
+-                                ? 'bg-gray-100 dark:bg-[#1e1e1e] text-gray-900 dark:text-gray-300'
+-                                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+-                                }`}
+-                            >
+-                              <Icon size={14} strokeWidth={2} />
+-                              <span>{item.label}</span>
+-                            </button>
+-                          )
+-                        })}
+-                      </div>
+-                    )}
++                  <div className="mt-1 space-y-1">
++                    {/* Freelancer */}
++                    <div>
++                      <button
++                        onClick={toggleFreelancerMenu}
++                        className="w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl transition-all text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
++                      >
++                        <div className="flex items-center gap-2.5">
++                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
++                            <path d="M14.096 3.076l1.634 2.292L24 3.076M5.503 20.924l4.474-4.374-2.692-2.89m6.133-10.584L11.027 5.23l4.022.15M4.124 3.077l.857 1.76 4.734.294m-3.058 7.072l3.497-6.522L0 5.13" />
++                          </svg>
++                          <span className="text-sm font-medium">Freelancer</span>
++                        </div>
++                        {freelancerExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
++                      </button>
++                      {freelancerExpanded && (
++                        <div className="ml-4 mt-1 space-y-1">
++                          {freelancerMenuItems.map((item) => {
++                            const Icon = item.icon
++                            const isActive = currentPage === item.id
++                            return (
++                              <button
++                                key={item.id}
++                                onClick={() => handleMenuClick(item.id)}
++                                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-sm ${isActive
++                                  ? 'bg-gray-100 dark:bg-[#1e1e1e] text-gray-900 dark:text-gray-300'
++                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
++                                  }`}
++                              >
++                                <Icon size={14} strokeWidth={2} />
++                                <span>{item.label}</span>
++                              </button>
++                            )
++                          })}
++                        </div>
++                      )}
++                    </div>
++
++                    {/* Upwork */}
++                    <div>
++                      <button
++                        onClick={toggleUpworkMenu}
++                        className="w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl transition-all text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
++                      >
++                        <div className="flex items-center gap-2.5">
++                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#14a800">
++                            <path d="M18.561 13.158c-1.102 0-2.135-.467-3.074-1.227l.228-1.076.008-.042c.207-1.143.849-3.06 2.839-3.06 1.492 0 2.703 1.212 2.703 2.703-.001 1.489-1.212 2.702-2.704 2.702zm0-8.14c-2.539 0-4.51 1.649-5.31 4.366-1.22-1.834-2.148-4.036-2.687-5.892H7.828v7.112c-.002 1.406-1.141 2.546-2.547 2.546-1.405 0-2.543-1.14-2.545-2.546V3.492H0v7.112c0 2.914 2.37 5.303 5.281 5.303 2.913 0 5.283-2.389 5.283-5.303v-1.19c.529 1.107 1.182 2.229 1.974 3.221l-1.673 7.873h2.797l1.213-5.71c1.063.679 2.285 1.109 3.686 1.109 3 0 5.439-2.452 5.439-5.45 0-3-2.439-5.439-5.439-5.439z"/>
++                          </svg>
++                          <span className="text-sm font-medium">Upwork</span>
++                        </div>
++                        {upworkExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
++                      </button>
++                      {upworkExpanded && (
++                        <div className="ml-4 mt-1 space-y-1">
++                          {upworkMenuItems.map((item) => {
++                            const Icon = item.icon
++                            const isActive = currentPage === item.id
++                            return (
++                              <button
++                                key={item.id}
++                                onClick={() => handleMenuClick(item.id)}
++                                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-sm ${isActive
++                                  ? 'bg-gray-100 dark:bg-[#1e1e1e] text-gray-900 dark:text-gray-300'
++                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
++                                  }`}
++                              >
++                                <Icon size={14} strokeWidth={2} />
++                                <span>{item.label}</span>
++                              </button>
++                            )
++                          })}
++                        </div>
++                      )}
++                    </div>
++
++                    {/* Guru */}
++                    <div>
++                      <button
++                        onClick={toggleGuruMenu}
++                        className="w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl transition-all text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
++                      >
++                        <div className="flex items-center gap-2.5">
++                          <span className="w-4 h-4 rounded-sm text-xs font-bold flex items-center justify-center text-white" style={{ backgroundColor: '#f47c20', fontSize: '10px' }}>G</span>
++                          <span className="text-sm font-medium">Guru</span>
++                        </div>
++                        {guruExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
++                      </button>
++                      {guruExpanded && (
++                        <div className="ml-4 mt-1 space-y-1">
++                          {guruMenuItems.map((item) => {
++                            const Icon = item.icon
++                            const isActive = currentPage === item.id
++                            return (
++                              <button
++                                key={item.id}
++                                onClick={() => handleMenuClick(item.id)}
++                                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-sm ${isActive
++                                  ? 'bg-gray-100 dark:bg-[#1e1e1e] text-gray-900 dark:text-gray-300'
++                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
++                                  }`}
++                              >
++                                <Icon size={14} strokeWidth={2} />
++                                <span>{item.label}</span>
++                              </button>
++                            )
++                          })}
++                        </div>
++                      )}
++                    </div>
+                   </div>
+                 )}
+               </div>
+diff --git a/src/pages/guru/GuruAutoBid.jsx b/src/pages/guru/GuruAutoBid.jsx
+new file mode 100644
+index 0000000..d572a0f
+--- /dev/null
++++ b/src/pages/guru/GuruAutoBid.jsx
+@@ -0,0 +1,185 @@
++import { useState, useEffect } from 'react'
++import { Play, Square, RefreshCw, AlertCircle, CheckCircle, DollarSign, Target, Clock } from 'lucide-react'
++import toast from 'react-hot-toast'
++import gif from '../../assets/gif.gif'
++
++const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
++const GURU_COLOR = '#f47c20'
++
++const GuruAutoBid = () => {
++  const [logs, setLogs] = useState([])
++  const [stats, setStats] = useState({ bids_today: 0, bids_week: 0, success_week: 0, is_running: false })
++  const [isLoading, setIsLoading] = useState(true)
++  const [isToggling, setIsToggling] = useState(false)
++  const [connectionStatus, setConnectionStatus] = useState('checking')
++  const [isPageLoaded, setIsPageLoaded] = useState(false)
++
++  useEffect(() => {
++    setIsPageLoaded(true)
++    checkConnection()
++  }, [])
++
++  const checkConnection = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/guru/status`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setConnectionStatus(data.connected ? 'connected' : 'disconnected')
++        if (data.connected) {
++          fetchStats()
++          fetchLogs()
++        }
++      } else {
++        setConnectionStatus('disconnected')
++      }
++    } catch {
++      setConnectionStatus('disconnected')
++    } finally {
++      setIsLoading(false)
++    }
++  }
++
++  const fetchStats = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/guru/autobid/stats`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) setStats(await response.json())
++    } catch {}
++  }
++
++  const fetchLogs = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/guru/autobid/history?limit=20`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setLogs(data.logs || data || [])
++      }
++    } catch {}
++  }
++
++  const toggleAutoBid = async () => {
++    setIsToggling(true)
++    try {
++      const token = localStorage.getItem('token')
++      const endpoint = stats.is_running ? '/api/guru/autobid/stop' : '/api/guru/autobid/start'
++      const response = await fetch(`${API_URL}${endpoint}`, {
++        method: 'POST',
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        toast.success(stats.is_running ? 'Guru auto-bid stopped' : 'Guru auto-bid started')
++        setStats(prev => ({ ...prev, is_running: !prev.is_running }))
++      } else {
++        toast.error('Failed to toggle auto-bid')
++      }
++    } catch {
++      toast.error('Failed to toggle auto-bid')
++    } finally {
++      setIsToggling(false)
++    }
++  }
++
++  if (!isPageLoaded) {
++    return (
++      <div className="flex items-center justify-center h-64">
++        <img src={gif} alt="Loading" className="w-16 h-16 object-contain" />
++      </div>
++    )
++  }
++
++  return (
++    <div className="p-6 space-y-6">
++      {/* Header */}
++      <div className="flex items-center justify-between">
++        <div className="flex items-center gap-3">
++          <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm" style={{ backgroundColor: GURU_COLOR }}>G</div>
++          <div>
++            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Guru Auto Quote</h2>
++            <p className="text-sm text-gray-500 dark:text-gray-400">Automated quote submission</p>
++          </div>
++        </div>
++        <div className="flex items-center gap-2">
++          <button onClick={() => { fetchStats(); fetchLogs() }} className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
++            <RefreshCw size={15} />
++          </button>
++          <button
++            onClick={toggleAutoBid}
++            disabled={isToggling || connectionStatus !== 'connected'}
++            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50"
++            style={{ backgroundColor: stats.is_running ? '#ef4444' : GURU_COLOR }}
++          >
++            {stats.is_running ? <><Square size={14} /> Stop</> : <><Play size={14} /> Start</>}
++          </button>
++        </div>
++      </div>
++
++      {connectionStatus === 'disconnected' && (
++        <div className="flex items-center gap-3 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
++          <AlertCircle size={18} className="text-yellow-600 flex-shrink-0" />
++          <p className="text-sm text-yellow-800 dark:text-yellow-300">Guru not connected. Visit guru.com with the extension active to connect.</p>
++        </div>
++      )}
++
++      {/* Stats */}
++      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
++        {[
++          { label: 'Quotes Today', value: stats.bids_today, icon: Target },
++          { label: 'Quotes This Week', value: stats.bids_week, icon: DollarSign },
++          { label: 'Successful', value: stats.success_week, icon: CheckCircle },
++        ].map(({ label, value, icon: Icon }) => (
++          <div key={label} className="bg-white dark:bg-[#1f1f1f] border border-gray-200 dark:border-gray-700 rounded-xl p-4">
++            <div className="flex items-center gap-2 mb-2">
++              <Icon size={14} className="text-gray-400" />
++              <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
++            </div>
++            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
++          </div>
++        ))}
++      </div>
++
++      {/* Status */}
++      <div className={`flex items-center gap-3 p-4 rounded-xl border ${
++        stats.is_running ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
++      }`}>
++        <div className={`w-2.5 h-2.5 rounded-full ${stats.is_running ? 'animate-pulse' : 'bg-gray-400'}`} style={stats.is_running ? { backgroundColor: GURU_COLOR } : {}} />
++        <p className={`text-sm font-medium ${stats.is_running ? 'text-orange-800 dark:text-orange-300' : 'text-gray-600 dark:text-gray-400'}`}>
++          {stats.is_running ? 'Auto-quoter is running' : 'Auto-quoter is stopped'}
++        </p>
++      </div>
++
++      {/* Logs */}
++      <div>
++        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Recent Activity</h3>
++        {isLoading && <div className="flex justify-center py-8"><img src={gif} alt="Loading" className="w-10 h-10 object-contain" /></div>}
++        {!isLoading && logs.length === 0 && (
++          <div className="text-center py-10 text-gray-500 dark:text-gray-400">
++            <Clock size={32} className="mx-auto mb-2 opacity-30" />
++            <p className="text-sm">No quote activity yet</p>
++          </div>
++        )}
++        {!isLoading && logs.map((log, i) => (
++          <div key={i} className="flex items-start gap-3 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
++            <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${log.status === 'success' ? 'bg-green-500' : log.status === 'error' ? 'bg-red-500' : 'bg-yellow-500'}`} />
++            <div className="flex-1 min-w-0">
++              <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{log.project_title || log.title || 'Unknown project'}</p>
++              <div className="flex items-center gap-2 mt-0.5">
++                {log.bid_amount && <span className="text-xs text-gray-500">${log.bid_amount}</span>}
++                <span className="text-xs text-gray-400">{log.timestamp ? new Date(log.timestamp).toLocaleString() : ''}</span>
++              </div>
++            </div>
++          </div>
++        ))}
++      </div>
++    </div>
++  )
++}
++
++export default GuruAutoBid
+diff --git a/src/pages/guru/GuruBids.jsx b/src/pages/guru/GuruBids.jsx
+new file mode 100644
+index 0000000..c187816
+--- /dev/null
++++ b/src/pages/guru/GuruBids.jsx
+@@ -0,0 +1,159 @@
++import { useState, useEffect } from 'react'
++import { DollarSign, Clock, AlertCircle, RefreshCw, CheckCircle, XCircle, Hourglass, ExternalLink } from 'lucide-react'
++import toast from 'react-hot-toast'
++import gif from '../../assets/gif.gif'
++
++const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
++const GURU_COLOR = '#f47c20'
++
++const STATUS_CONFIG = {
++  accepted: { icon: CheckCircle, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', label: 'Accepted' },
++  rejected: { icon: XCircle, color: 'text-red-500 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', label: 'Rejected' },
++  pending: { icon: Hourglass, color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-900/20', label: 'Pending' },
++}
++
++const GuruBids = () => {
++  const [bids, setBids] = useState([])
++  const [isLoading, setIsLoading] = useState(true)
++  const [filter, setFilter] = useState('all')
++  const [connectionStatus, setConnectionStatus] = useState('checking')
++
++  useEffect(() => {
++    checkConnection()
++  }, [])
++
++  useEffect(() => {
++    if (connectionStatus === 'connected') loadBids()
++  }, [filter, connectionStatus])
++
++  const checkConnection = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/guru/status`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setConnectionStatus(data.connected ? 'connected' : 'disconnected')
++      } else {
++        setConnectionStatus('disconnected')
++      }
++    } catch {
++      setConnectionStatus('disconnected')
++    }
++  }
++
++  const loadBids = async () => {
++    setIsLoading(true)
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/guru/bids?filter=${filter}`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setBids(data.bids || data || [])
++      } else {
++        setBids([])
++      }
++    } catch {
++      toast.error('Failed to load Guru bids')
++      setBids([])
++    } finally {
++      setIsLoading(false)
++    }
++  }
++
++  return (
++    <div className="p-6 space-y-6">
++      {/* Header */}
++      <div className="flex items-center justify-between">
++        <div className="flex items-center gap-3">
++          <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm" style={{ backgroundColor: GURU_COLOR }}>G</div>
++          <div>
++            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">My Guru Quotes</h2>
++            <p className="text-sm text-gray-500 dark:text-gray-400">{bids.length} quotes</p>
++          </div>
++        </div>
++        <div className="flex items-center gap-2">
++          {['all', 'pending', 'accepted', 'rejected'].map(f => (
++            <button
++              key={f}
++              onClick={() => setFilter(f)}
++              className={`px-3 py-1.5 text-xs font-medium rounded-lg capitalize transition-colors ${
++                filter === f ? 'text-white' : 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800'
++              }`}
++              style={filter === f ? { backgroundColor: GURU_COLOR } : {}}
++            >
++              {f}
++            </button>
++          ))}
++          <button onClick={loadBids} disabled={isLoading} className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
++            <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
++          </button>
++        </div>
++      </div>
++
++      {connectionStatus === 'disconnected' && (
++        <div className="flex items-center gap-3 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
++          <AlertCircle size={18} className="text-yellow-600 flex-shrink-0" />
++          <p className="text-sm text-yellow-800 dark:text-yellow-300">Guru not connected. Visit guru.com with the extension active to connect.</p>
++        </div>
++      )}
++
++      {isLoading && (
++        <div className="flex justify-center py-16">
++          <img src={gif} alt="Loading" className="w-12 h-12 object-contain" />
++        </div>
++      )}
++
++      {!isLoading && connectionStatus === 'connected' && bids.length === 0 && (
++        <div className="text-center py-16 text-gray-500 dark:text-gray-400">
++          <div className="w-10 h-10 rounded-full mx-auto mb-3 opacity-30 flex items-center justify-center text-2xl font-bold">G</div>
++          <p className="font-medium">No quotes yet</p>
++          <p className="text-sm mt-1">Quotes placed via the auto-bidder will appear here</p>
++        </div>
++      )}
++
++      {!isLoading && bids.map(bid => {
++        const statusKey = (bid.status || 'pending').toLowerCase()
++        const cfg = STATUS_CONFIG[statusKey] || STATUS_CONFIG.pending
++        const Icon = cfg.icon
++        return (
++          <div key={bid.id || bid.project_id} className="bg-white dark:bg-[#1f1f1f] border border-gray-200 dark:border-gray-700 rounded-xl p-5">
++            <div className="flex items-start justify-between gap-3">
++              <div className="flex-1 min-w-0">
++                <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate">{bid.project_title || bid.title || 'Untitled Project'}</h3>
++                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
++                  {bid.bid_amount && (
++                    <span className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
++                      <DollarSign size={13} />{bid.bid_amount}
++                    </span>
++                  )}
++                  {bid.submitted_at && (
++                    <span className="flex items-center gap-1 text-xs text-gray-500">
++                      <Clock size={12} />{new Date(bid.submitted_at).toLocaleDateString()}
++                    </span>
++                  )}
++                  <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.color}`}>
++                    <Icon size={11} />{cfg.label}
++                  </span>
++                </div>
++                {bid.proposal_text && (
++                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">{bid.proposal_text}</p>
++                )}
++              </div>
++              {bid.project_url && (
++                <a href={bid.project_url} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-orange-500 transition-colors flex-shrink-0">
++                  <ExternalLink size={15} />
++                </a>
++              )}
++            </div>
++          </div>
++        )
++      })}
++    </div>
++  )
++}
++
++export default GuruBids
+diff --git a/src/pages/guru/GuruProjects.jsx b/src/pages/guru/GuruProjects.jsx
+new file mode 100644
+index 0000000..6094d2e
+--- /dev/null
++++ b/src/pages/guru/GuruProjects.jsx
+@@ -0,0 +1,227 @@
++import { useState, useEffect } from 'react'
++import { ExternalLink, DollarSign, Clock, RefreshCw, AlertCircle, Search, ChevronDown, ChevronUp } from 'lucide-react'
++import toast from 'react-hot-toast'
++import gif from '../../assets/gif.gif'
++
++const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
++
++// Guru orange brand colour
++const GURU_COLOR = '#f47c20'
++
++const GuruIcon = () => (
++  <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-white">
++    <circle cx="12" cy="12" r="10" />
++    <text x="12" y="16" textAnchor="middle" fontSize="10" fill="white" fontWeight="bold">G</text>
++  </svg>
++)
++
++const GuruProjects = () => {
++  const [projects, setProjects] = useState([])
++  const [isLoading, setIsLoading] = useState(true)
++  const [connectionStatus, setConnectionStatus] = useState('checking')
++  const [isSyncing, setIsSyncing] = useState(false)
++  const [searchQuery, setSearchQuery] = useState('')
++  const [expandedDescriptions, setExpandedDescriptions] = useState(new Set())
++  const [isPageLoaded, setIsPageLoaded] = useState(false)
++
++  useEffect(() => {
++    setIsPageLoaded(true)
++    checkConnection()
++  }, [])
++
++  const checkConnection = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/guru/status`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setConnectionStatus(data.connected ? 'connected' : 'disconnected')
++        if (data.connected) loadProjects()
++      } else {
++        setConnectionStatus('disconnected')
++      }
++    } catch {
++      setConnectionStatus('disconnected')
++    } finally {
++      setIsLoading(false)
++    }
++  }
++
++  const loadProjects = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/guru/projects`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setProjects(data.projects || data || [])
++      }
++    } catch {
++      toast.error('Failed to load Guru projects')
++    }
++  }
++
++  const handleSync = async () => {
++    setIsSyncing(true)
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/fetch-guru`, {
++        method: 'POST',
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        toast.success('Guru sync started')
++        setTimeout(() => loadProjects(), 3000)
++      } else {
++        toast.error('Sync failed')
++      }
++    } catch {
++      toast.error('Sync failed')
++    } finally {
++      setIsSyncing(false)
++    }
++  }
++
++  const toggleDescription = (id) => {
++    setExpandedDescriptions(prev => {
++      const next = new Set(prev)
++      next.has(id) ? next.delete(id) : next.add(id)
++      return next
++    })
++  }
++
++  const filtered = projects.filter(p =>
++    !searchQuery || p.title?.toLowerCase().includes(searchQuery.toLowerCase())
++  )
++
++  if (!isPageLoaded) {
++    return (
++      <div className="flex items-center justify-center h-64">
++        <img src={gif} alt="Loading" className="w-16 h-16 object-contain" />
++      </div>
++    )
++  }
++
++  return (
++    <div className="p-6 space-y-6">
++      {/* Header */}
++      <div className="flex items-center justify-between">
++        <div className="flex items-center gap-3">
++          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: GURU_COLOR }}>
++            <GuruIcon />
++          </div>
++          <div>
++            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Available Projects</h2>
++            <p className="text-sm text-gray-500 dark:text-gray-400">{filtered.length} Guru jobs found</p>
++          </div>
++        </div>
++        <div className="flex items-center gap-3">
++          <div className="relative">
++            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
++            <input
++              type="text"
++              placeholder="Search projects..."
++              value={searchQuery}
++              onChange={e => setSearchQuery(e.target.value)}
++              className="pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-[#1f1f1f] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2"
++            />
++          </div>
++          <button
++            onClick={handleSync}
++            disabled={isSyncing || connectionStatus !== 'connected'}
++            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50"
++            style={{ backgroundColor: GURU_COLOR }}
++          >
++            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
++            {isSyncing ? 'Syncing...' : 'Sync'}
++          </button>
++        </div>
++      </div>
++
++      {/* Not connected */}
++      {connectionStatus === 'disconnected' && (
++        <div className="flex items-center gap-3 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
++          <AlertCircle size={18} className="text-yellow-600 flex-shrink-0" />
++          <div>
++            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">Guru not connected</p>
++            <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">Visit guru.com while the extension is active to capture your token.</p>
++          </div>
++        </div>
++      )}
++
++      {isLoading && (
++        <div className="flex justify-center py-16">
++          <img src={gif} alt="Loading" className="w-12 h-12 object-contain" />
++        </div>
++      )}
++
++      {!isLoading && connectionStatus === 'connected' && filtered.length === 0 && (
++        <div className="text-center py-16 text-gray-500 dark:text-gray-400">
++          <div className="w-10 h-10 rounded-full mx-auto mb-3 opacity-30 flex items-center justify-center text-2xl font-bold">G</div>
++          <p className="font-medium">No projects found</p>
++          <p className="text-sm mt-1">Click Sync to fetch the latest Guru jobs</p>
++        </div>
++      )}
++
++      {!isLoading && filtered.map(project => {
++        const isExpanded = expandedDescriptions.has(project.id)
++        const desc = project.description || project.snippet || ''
++        return (
++          <div key={project.id} className="bg-white dark:bg-[#1f1f1f] border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-3">
++            <div className="flex items-start justify-between gap-3">
++              <div className="flex-1 min-w-0">
++                <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">{project.title}</h3>
++                <div className="flex items-center gap-3 mt-1 flex-wrap">
++                  {project.budget && (
++                    <span className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
++                      <DollarSign size={13} />{project.budget}
++                    </span>
++                  )}
++                  {project.posted_at && (
++                    <span className="flex items-center gap-1 text-xs text-gray-500">
++                      <Clock size={12} />{project.posted_at}
++                    </span>
++                  )}
++                  {project.skills && (
++                    <div className="flex gap-1 flex-wrap">
++                      {(Array.isArray(project.skills) ? project.skills : project.skills.split(',')).slice(0, 4).map((s, i) => (
++                        <span key={i} className="px-2 py-0.5 text-xs rounded-full border" style={{ backgroundColor: '#fff7f0', color: GURU_COLOR, borderColor: '#fcd9b5' }}>
++                          {s.trim()}
++                        </span>
++                      ))}
++                    </div>
++                  )}
++                </div>
++              </div>
++              <a
++                href={project.url || `https://www.guru.com/d/jobs/id/${project.id}`}
++                target="_blank"
++                rel="noopener noreferrer"
++                className="flex-shrink-0 p-2 text-gray-400 transition-colors"
++                style={{ ':hover': { color: GURU_COLOR } }}
++              >
++                <ExternalLink size={16} />
++              </a>
++            </div>
++
++            {desc && (
++              <div>
++                <p className={`text-sm text-gray-600 dark:text-gray-400 ${isExpanded ? '' : 'line-clamp-2'}`}>{desc}</p>
++                {desc.length > 120 && (
++                  <button onClick={() => toggleDescription(project.id)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 mt-1">
++                    {isExpanded ? <><ChevronUp size={12} /> Show less</> : <><ChevronDown size={12} /> Show more</>}
++                  </button>
++                )}
++              </div>
++            )}
++          </div>
++        )
++      })}
++    </div>
++  )
++}
++
++export default GuruProjects
+diff --git a/src/pages/guru/GuruSettings.jsx b/src/pages/guru/GuruSettings.jsx
+new file mode 100644
+index 0000000..9d6ef83
+--- /dev/null
++++ b/src/pages/guru/GuruSettings.jsx
+@@ -0,0 +1,265 @@
++import { useState, useEffect } from 'react'
++import { CheckCircle, XCircle, AlertCircle, RefreshCw, Save, ExternalLink } from 'lucide-react'
++import toast from 'react-hot-toast'
++import gif from '../../assets/gif.gif'
++
++const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
++const GURU_COLOR = '#f47c20'
++
++const GuruSettings = () => {
++  const [connectionStatus, setConnectionStatus] = useState('checking')
++  const [credentials, setCredentials] = useState(null)
++  const [isPageLoaded, setIsPageLoaded] = useState(false)
++  const [isSaving, setIsSaving] = useState(false)
++
++  const [settings, setSettings] = useState(() => {
++    try {
++      const cached = localStorage.getItem('guruAutoBidSettings')
++      if (cached) return JSON.parse(cached)
++    } catch {}
++    return {
++      enabled: false,
++      daily_bids: 10,
++      frequency_minutes: 15,
++      min_skill_match: 1,
++      smart_bidding: true,
++      employer_verified_only: false,
++      job_categories: [],
++    }
++  })
++
++  useEffect(() => {
++    setIsPageLoaded(true)
++    checkConnection()
++    loadSettings()
++  }, [])
++
++  const checkConnection = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/guru/status`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setConnectionStatus(data.connected ? 'connected' : 'disconnected')
++        setCredentials(data.profile || null)
++      } else {
++        setConnectionStatus('disconnected')
++      }
++    } catch {
++      setConnectionStatus('disconnected')
++    }
++  }
++
++  const loadSettings = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/guru/settings`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setSettings(prev => ({ ...prev, ...data }))
++        localStorage.setItem('guruAutoBidSettings', JSON.stringify(data))
++      }
++    } catch {}
++  }
++
++  const saveSettings = async () => {
++    setIsSaving(true)
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/guru/settings`, {
++        method: 'POST',
++        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
++        body: JSON.stringify(settings)
++      })
++      if (response.ok) {
++        localStorage.setItem('guruAutoBidSettings', JSON.stringify(settings))
++        toast.success('Guru settings saved')
++      } else {
++        toast.error('Failed to save settings')
++      }
++    } catch {
++      toast.error('Failed to save settings')
++    } finally {
++      setIsSaving(false)
++    }
++  }
++
++  const disconnectGuru = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      await fetch(`${API_URL}/api/guru/disconnect`, {
++        method: 'POST',
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      setConnectionStatus('disconnected')
++      setCredentials(null)
++      toast.success('Guru disconnected')
++    } catch {
++      toast.error('Failed to disconnect')
++    }
++  }
++
++  if (!isPageLoaded) {
++    return (
++      <div className="flex items-center justify-center h-64">
++        <img src={gif} alt="Loading" className="w-16 h-16 object-contain" />
++      </div>
++    )
++  }
++
++  const statusIcon = connectionStatus === 'connected'
++    ? <CheckCircle size={16} className="text-green-500" />
++    : connectionStatus === 'checking'
++    ? <RefreshCw size={16} className="text-gray-400 animate-spin" />
++    : <XCircle size={16} className="text-red-500" />
++
++  return (
++    <div className="p-6 space-y-6 max-w-2xl">
++      {/* Header */}
++      <div className="flex items-center gap-3">
++        <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm" style={{ backgroundColor: GURU_COLOR }}>G</div>
++        <div>
++          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Guru Settings</h2>
++          <p className="text-sm text-gray-500 dark:text-gray-400">Manage your Guru.com connection and automation</p>
++        </div>
++      </div>
++
++      {/* Connection card */}
++      <div className="bg-white dark:bg-[#1f1f1f] border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-4">
++        <div className="flex items-center justify-between">
++          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Connection Status</h3>
++          <button onClick={checkConnection} className="text-gray-400 hover:text-gray-600 transition-colors">
++            <RefreshCw size={14} />
++          </button>
++        </div>
++
++        <div className="flex items-center gap-3">
++          {statusIcon}
++          <span className={`text-sm font-medium ${
++            connectionStatus === 'connected' ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'
++          }`}>
++            {connectionStatus === 'checking' ? 'Checking...' : connectionStatus === 'connected' ? 'Connected' : 'Not Connected'}
++          </span>
++        </div>
++
++        {credentials && (
++          <div className="p-3 rounded-lg" style={{ backgroundColor: '#fff7f0' }}>
++            <p className="text-sm font-medium" style={{ color: GURU_COLOR }}>{credentials.name || 'Guru Account'}</p>
++            {credentials.username && <p className="text-xs" style={{ color: '#c96100' }}>@{credentials.username}</p>}
++          </div>
++        )}
++
++        {connectionStatus === 'disconnected' && (
++          <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
++            <AlertCircle size={15} className="text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
++            <div className="text-xs text-blue-700 dark:text-blue-400">
++              <p className="font-medium mb-1">How to connect Guru:</p>
++              <ol className="list-decimal list-inside space-y-0.5">
++                <li>Make sure the AK BPO Chrome extension is installed</li>
++                <li>Visit <a href="https://www.guru.com" target="_blank" rel="noopener noreferrer" className="underline inline-flex items-center gap-0.5">guru.com <ExternalLink size={10} /></a> and log in</li>
++                <li>The extension will automatically capture your token</li>
++                <li>Refresh this page</li>
++              </ol>
++            </div>
++          </div>
++        )}
++
++        {connectionStatus === 'connected' && (
++          <button onClick={disconnectGuru} className="text-xs text-red-500 hover:text-red-700 transition-colors">
++            Disconnect Guru
++          </button>
++        )}
++      </div>
++
++      {/* Auto-bid settings */}
++      <div className="bg-white dark:bg-[#1f1f1f] border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-5">
++        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Auto-Quote Settings</h3>
++
++        <div className="flex items-center justify-between">
++          <div>
++            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Enable Auto-Quoting</p>
++            <p className="text-xs text-gray-500 mt-0.5">Automatically submit quotes on matching jobs</p>
++          </div>
++          <button
++            onClick={() => setSettings(prev => ({ ...prev, enabled: !prev.enabled }))}
++            className={`w-11 h-6 rounded-full transition-colors ${settings.enabled ? '' : 'bg-gray-300 dark:bg-gray-600'}`}
++            style={settings.enabled ? { backgroundColor: GURU_COLOR } : {}}
++          >
++            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform mx-1 ${settings.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
++          </button>
++        </div>
++
++        <div className="grid grid-cols-2 gap-4">
++          <div>
++            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Daily Quote Limit</label>
++            <input
++              type="number"
++              value={settings.daily_bids}
++              onChange={e => setSettings(prev => ({ ...prev, daily_bids: parseInt(e.target.value) || 0 }))}
++              min={1} max={50}
++              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-[#2a2a2a] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2"
++            />
++          </div>
++          <div>
++            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Check Interval (mins)</label>
++            <input
++              type="number"
++              value={settings.frequency_minutes}
++              onChange={e => setSettings(prev => ({ ...prev, frequency_minutes: parseInt(e.target.value) || 0 }))}
++              min={5} max={120}
++              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-[#2a2a2a] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2"
++            />
++          </div>
++          <div>
++            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Min Skill Match</label>
++            <input
++              type="number"
++              value={settings.min_skill_match}
++              onChange={e => setSettings(prev => ({ ...prev, min_skill_match: parseInt(e.target.value) || 0 }))}
++              min={1} max={10}
++              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-[#2a2a2a] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2"
++            />
++          </div>
++        </div>
++
++        <div className="flex items-center justify-between pt-2">
++          <div className="flex items-center gap-4">
++            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
++              <input
++                type="checkbox"
++                checked={settings.smart_bidding}
++                onChange={e => setSettings(prev => ({ ...prev, smart_bidding: e.target.checked }))}
++                className="rounded"
++              />
++              Smart bidding
++            </label>
++            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
++              <input
++                type="checkbox"
++                checked={settings.employer_verified_only}
++                onChange={e => setSettings(prev => ({ ...prev, employer_verified_only: e.target.checked }))}
++                className="rounded"
++              />
++              Verified employers only
++            </label>
++          </div>
++          <button
++            onClick={saveSettings}
++            disabled={isSaving}
++            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50"
++            style={{ backgroundColor: GURU_COLOR }}
++          >
++            <Save size={14} />
++            {isSaving ? 'Saving...' : 'Save'}
++          </button>
++        </div>
++      </div>
++    </div>
++  )
++}
++
++export default GuruSettings
+diff --git a/src/pages/upwork/UpworkAutoBid.jsx b/src/pages/upwork/UpworkAutoBid.jsx
+new file mode 100644
+index 0000000..2511c31
+--- /dev/null
++++ b/src/pages/upwork/UpworkAutoBid.jsx
+@@ -0,0 +1,200 @@
++import { useState, useEffect } from 'react'
++import { Play, Square, RefreshCw, AlertCircle, CheckCircle, Zap, DollarSign, Target, Clock } from 'lucide-react'
++import toast from 'react-hot-toast'
++import gif from '../../assets/gif.gif'
++
++const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
++
++const UpworkAutoBid = () => {
++  const [logs, setLogs] = useState([])
++  const [stats, setStats] = useState({ bids_today: 0, bids_week: 0, success_week: 0, is_running: false, connects_used: 0 })
++  const [isLoading, setIsLoading] = useState(true)
++  const [isToggling, setIsToggling] = useState(false)
++  const [connectionStatus, setConnectionStatus] = useState('checking')
++  const [isPageLoaded, setIsPageLoaded] = useState(false)
++
++  useEffect(() => {
++    setIsPageLoaded(true)
++    checkConnection()
++  }, [])
++
++  const checkConnection = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/upwork/status`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setConnectionStatus(data.connected ? 'connected' : 'disconnected')
++        if (data.connected) {
++          fetchStats()
++          fetchLogs()
++        }
++      } else {
++        setConnectionStatus('disconnected')
++      }
++    } catch {
++      setConnectionStatus('disconnected')
++    } finally {
++      setIsLoading(false)
++    }
++  }
++
++  const fetchStats = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/upwork/autobid/stats`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setStats(data)
++      }
++    } catch {}
++  }
++
++  const fetchLogs = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/upwork/autobid/history?limit=20`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setLogs(data.logs || data || [])
++      }
++    } catch {}
++  }
++
++  const toggleAutoBid = async () => {
++    setIsToggling(true)
++    try {
++      const token = localStorage.getItem('token')
++      const endpoint = stats.is_running ? '/api/upwork/autobid/stop' : '/api/upwork/autobid/start'
++      const response = await fetch(`${API_URL}${endpoint}`, {
++        method: 'POST',
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        toast.success(stats.is_running ? 'Upwork auto-bid stopped' : 'Upwork auto-bid started')
++        setStats(prev => ({ ...prev, is_running: !prev.is_running }))
++      } else {
++        toast.error('Failed to toggle auto-bid')
++      }
++    } catch {
++      toast.error('Failed to toggle auto-bid')
++    } finally {
++      setIsToggling(false)
++    }
++  }
++
++  if (!isPageLoaded) {
++    return (
++      <div className="flex items-center justify-center h-64">
++        <img src={gif} alt="Loading" className="w-16 h-16 object-contain" />
++      </div>
++    )
++  }
++
++  return (
++    <div className="p-6 space-y-6">
++      {/* Header */}
++      <div className="flex items-center justify-between">
++        <div className="flex items-center gap-3">
++          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#14a800' }}>
++            <Zap size={16} className="text-white" />
++          </div>
++          <div>
++            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Upwork Auto Bid</h2>
++            <p className="text-sm text-gray-500 dark:text-gray-400">Automated proposal submission</p>
++          </div>
++        </div>
++        <div className="flex items-center gap-2">
++          <button
++            onClick={() => { fetchStats(); fetchLogs() }}
++            className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
++          >
++            <RefreshCw size={15} />
++          </button>
++          <button
++            onClick={toggleAutoBid}
++            disabled={isToggling || connectionStatus !== 'connected'}
++            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 transition-colors"
++            style={{ backgroundColor: stats.is_running ? '#ef4444' : '#14a800' }}
++          >
++            {stats.is_running ? <><Square size={14} /> Stop</> : <><Play size={14} /> Start</>}
++          </button>
++        </div>
++      </div>
++
++      {/* Not connected */}
++      {connectionStatus === 'disconnected' && (
++        <div className="flex items-center gap-3 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
++          <AlertCircle size={18} className="text-yellow-600 flex-shrink-0" />
++          <p className="text-sm text-yellow-800 dark:text-yellow-300">Upwork not connected. Visit Upwork.com with the extension active to connect.</p>
++        </div>
++      )}
++
++      {/* Stats grid */}
++      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
++        {[
++          { label: 'Bids Today', value: stats.bids_today, icon: Target },
++          { label: 'Bids This Week', value: stats.bids_week, icon: Zap },
++          { label: 'Successful', value: stats.success_week, icon: CheckCircle },
++          { label: 'Connects Used', value: stats.connects_used || 0, icon: DollarSign },
++        ].map(({ label, value, icon: Icon }) => (
++          <div key={label} className="bg-white dark:bg-[#1f1f1f] border border-gray-200 dark:border-gray-700 rounded-xl p-4">
++            <div className="flex items-center gap-2 mb-2">
++              <Icon size={14} className="text-gray-400" />
++              <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
++            </div>
++            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
++          </div>
++        ))}
++      </div>
++
++      {/* Status indicator */}
++      <div className={`flex items-center gap-3 p-4 rounded-xl border ${
++        stats.is_running
++          ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
++          : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
++      }`}>
++        <div className={`w-2.5 h-2.5 rounded-full ${stats.is_running ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
++        <p className={`text-sm font-medium ${stats.is_running ? 'text-green-800 dark:text-green-300' : 'text-gray-600 dark:text-gray-400'}`}>
++          {stats.is_running ? 'Auto-bidder is running' : 'Auto-bidder is stopped'}
++        </p>
++      </div>
++
++      {/* Recent bid logs */}
++      <div>
++        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Recent Activity</h3>
++        {isLoading && (
++          <div className="flex justify-center py-8">
++            <img src={gif} alt="Loading" className="w-10 h-10 object-contain" />
++          </div>
++        )}
++        {!isLoading && logs.length === 0 && (
++          <div className="text-center py-10 text-gray-500 dark:text-gray-400">
++            <Clock size={32} className="mx-auto mb-2 opacity-30" />
++            <p className="text-sm">No bid activity yet</p>
++          </div>
++        )}
++        {!isLoading && logs.map((log, i) => (
++          <div key={i} className="flex items-start gap-3 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
++            <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${log.status === 'success' ? 'bg-green-500' : log.status === 'error' ? 'bg-red-500' : 'bg-yellow-500'}`} />
++            <div className="flex-1 min-w-0">
++              <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{log.project_title || log.title || 'Unknown project'}</p>
++              <div className="flex items-center gap-2 mt-0.5">
++                {log.bid_amount && <span className="text-xs text-gray-500">${log.bid_amount}</span>}
++                <span className="text-xs text-gray-400">{log.timestamp ? new Date(log.timestamp).toLocaleString() : ''}</span>
++              </div>
++            </div>
++          </div>
++        ))}
++      </div>
++    </div>
++  )
++}
++
++export default UpworkAutoBid
+diff --git a/src/pages/upwork/UpworkBids.jsx b/src/pages/upwork/UpworkBids.jsx
+new file mode 100644
+index 0000000..696e3fe
+--- /dev/null
++++ b/src/pages/upwork/UpworkBids.jsx
+@@ -0,0 +1,181 @@
++import { useState, useEffect } from 'react'
++import { DollarSign, Clock, AlertCircle, RefreshCw, CheckCircle, XCircle, Hourglass, ExternalLink, Zap } from 'lucide-react'
++import toast from 'react-hot-toast'
++import gif from '../../assets/gif.gif'
++
++const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
++
++const STATUS_CONFIG = {
++  accepted: { icon: CheckCircle, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', label: 'Accepted' },
++  rejected: { icon: XCircle, color: 'text-red-500 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', label: 'Rejected' },
++  pending: { icon: Hourglass, color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-900/20', label: 'Pending' },
++  retracted: { icon: XCircle, color: 'text-gray-500 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800', label: 'Retracted' },
++}
++
++const UpworkBids = () => {
++  const [bids, setBids] = useState([])
++  const [isLoading, setIsLoading] = useState(true)
++  const [filter, setFilter] = useState('all')
++  const [connectionStatus, setConnectionStatus] = useState('checking')
++
++  useEffect(() => {
++    checkConnection()
++  }, [])
++
++  useEffect(() => {
++    if (connectionStatus === 'connected') loadBids()
++  }, [filter, connectionStatus])
++
++  const checkConnection = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/upwork/status`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setConnectionStatus(data.connected ? 'connected' : 'disconnected')
++      } else {
++        setConnectionStatus('disconnected')
++      }
++    } catch {
++      setConnectionStatus('disconnected')
++    }
++  }
++
++  const loadBids = async () => {
++    setIsLoading(true)
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/upwork/bids?filter=${filter}`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setBids(data.bids || data || [])
++      } else {
++        setBids([])
++      }
++    } catch {
++      toast.error('Failed to load Upwork bids')
++      setBids([])
++    } finally {
++      setIsLoading(false)
++    }
++  }
++
++  const filterOptions = ['all', 'pending', 'accepted', 'rejected']
++
++  return (
++    <div className="p-6 space-y-6">
++      {/* Header */}
++      <div className="flex items-center justify-between">
++        <div className="flex items-center gap-3">
++          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#14a800' }}>
++            <Zap size={16} className="text-white" />
++          </div>
++          <div>
++            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">My Upwork Bids</h2>
++            <p className="text-sm text-gray-500 dark:text-gray-400">{bids.length} bids</p>
++          </div>
++        </div>
++        <div className="flex items-center gap-2">
++          {filterOptions.map(f => (
++            <button
++              key={f}
++              onClick={() => setFilter(f)}
++              className={`px-3 py-1.5 text-xs font-medium rounded-lg capitalize transition-colors ${
++                filter === f
++                  ? 'text-white'
++                  : 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'
++              }`}
++              style={filter === f ? { backgroundColor: '#14a800' } : {}}
++            >
++              {f}
++            </button>
++          ))}
++          <button
++            onClick={loadBids}
++            disabled={isLoading}
++            className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
++          >
++            <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
++          </button>
++        </div>
++      </div>
++
++      {/* Not connected */}
++      {connectionStatus === 'disconnected' && (
++        <div className="flex items-center gap-3 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
++          <AlertCircle size={18} className="text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
++          <p className="text-sm text-yellow-800 dark:text-yellow-300">Upwork not connected. Visit Upwork.com with the extension active to connect.</p>
++        </div>
++      )}
++
++      {/* Loading */}
++      {isLoading && (
++        <div className="flex justify-center py-16">
++          <img src={gif} alt="Loading" className="w-12 h-12 object-contain" />
++        </div>
++      )}
++
++      {/* Empty state */}
++      {!isLoading && connectionStatus === 'connected' && bids.length === 0 && (
++        <div className="text-center py-16 text-gray-500 dark:text-gray-400">
++          <Zap size={40} className="mx-auto mb-3 opacity-30" />
++          <p className="font-medium">No bids yet</p>
++          <p className="text-sm mt-1">Bids placed via the auto-bidder will appear here</p>
++        </div>
++      )}
++
++      {/* Bid list */}
++      {!isLoading && bids.map(bid => {
++        const statusKey = (bid.status || 'pending').toLowerCase()
++        const cfg = STATUS_CONFIG[statusKey] || STATUS_CONFIG.pending
++        const Icon = cfg.icon
++        return (
++          <div key={bid.id || bid.project_id} className="bg-white dark:bg-[#1f1f1f] border border-gray-200 dark:border-gray-700 rounded-xl p-5">
++            <div className="flex items-start justify-between gap-3">
++              <div className="flex-1 min-w-0">
++                <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate">
++                  {bid.project_title || bid.title || 'Untitled Project'}
++                </h3>
++                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
++                  {bid.bid_amount && (
++                    <span className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
++                      <DollarSign size={13} />{bid.bid_amount}
++                    </span>
++                  )}
++                  {bid.submitted_at && (
++                    <span className="flex items-center gap-1 text-xs text-gray-500">
++                      <Clock size={12} />{new Date(bid.submitted_at).toLocaleDateString()}
++                    </span>
++                  )}
++                  <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.color}`}>
++                    <Icon size={11} />
++                    {cfg.label}
++                  </span>
++                </div>
++                {bid.proposal_text && (
++                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">{bid.proposal_text}</p>
++                )}
++              </div>
++              {bid.project_url && (
++                <a
++                  href={bid.project_url}
++                  target="_blank"
++                  rel="noopener noreferrer"
++                  className="text-gray-400 hover:text-green-600 transition-colors flex-shrink-0"
++                >
++                  <ExternalLink size={15} />
++                </a>
++              )}
++            </div>
++          </div>
++        )
++      })}
++    </div>
++  )
++}
++
++export default UpworkBids
+diff --git a/src/pages/upwork/UpworkProjects.jsx b/src/pages/upwork/UpworkProjects.jsx
+new file mode 100644
+index 0000000..490ed01
+--- /dev/null
++++ b/src/pages/upwork/UpworkProjects.jsx
+@@ -0,0 +1,226 @@
++import { useState, useEffect } from 'react'
++import { ExternalLink, DollarSign, Clock, RefreshCw, AlertCircle, Search, ChevronDown, ChevronUp, Zap } from 'lucide-react'
++import toast from 'react-hot-toast'
++import gif from '../../assets/gif.gif'
++
++const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
++
++const UpworkProjects = () => {
++  const [projects, setProjects] = useState([])
++  const [isLoading, setIsLoading] = useState(true)
++  const [connectionStatus, setConnectionStatus] = useState('checking')
++  const [isSyncing, setIsSyncing] = useState(false)
++  const [searchQuery, setSearchQuery] = useState('')
++  const [expandedDescriptions, setExpandedDescriptions] = useState(new Set())
++  const [isPageLoaded, setIsPageLoaded] = useState(false)
++
++  useEffect(() => {
++    setIsPageLoaded(true)
++    checkConnection()
++  }, [])
++
++  const checkConnection = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/upwork/status`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setConnectionStatus(data.connected ? 'connected' : 'disconnected')
++        if (data.connected) loadProjects()
++      } else {
++        setConnectionStatus('disconnected')
++      }
++    } catch {
++      setConnectionStatus('disconnected')
++    } finally {
++      setIsLoading(false)
++    }
++  }
++
++  const loadProjects = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/upwork/projects`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setProjects(data.projects || data || [])
++      }
++    } catch {
++      toast.error('Failed to load Upwork projects')
++    }
++  }
++
++  const handleSync = async () => {
++    setIsSyncing(true)
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/fetch-upwork`, {
++        method: 'POST',
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        toast.success('Upwork sync started')
++        setTimeout(() => loadProjects(), 3000)
++      } else {
++        toast.error('Sync failed')
++      }
++    } catch {
++      toast.error('Sync failed')
++    } finally {
++      setIsSyncing(false)
++    }
++  }
++
++  const toggleDescription = (id) => {
++    setExpandedDescriptions(prev => {
++      const next = new Set(prev)
++      next.has(id) ? next.delete(id) : next.add(id)
++      return next
++    })
++  }
++
++  const filtered = projects.filter(p =>
++    !searchQuery || p.title?.toLowerCase().includes(searchQuery.toLowerCase())
++  )
++
++  if (!isPageLoaded) {
++    return (
++      <div className="flex items-center justify-center h-64">
++        <img src={gif} alt="Loading" className="w-16 h-16 object-contain" />
++      </div>
++    )
++  }
++
++  return (
++    <div className="p-6 space-y-6">
++      {/* Header */}
++      <div className="flex items-center justify-between">
++        <div className="flex items-center gap-3">
++          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#14a800' }}>
++            <Zap size={16} className="text-white" />
++          </div>
++          <div>
++            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Available Projects</h2>
++            <p className="text-sm text-gray-500 dark:text-gray-400">{filtered.length} Upwork jobs found</p>
++          </div>
++        </div>
++        <div className="flex items-center gap-3">
++          <div className="relative">
++            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
++            <input
++              type="text"
++              placeholder="Search projects..."
++              value={searchQuery}
++              onChange={e => setSearchQuery(e.target.value)}
++              className="pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-[#1f1f1f] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500"
++            />
++          </div>
++          <button
++            onClick={handleSync}
++            disabled={isSyncing || connectionStatus !== 'connected'}
++            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 transition-colors"
++            style={{ backgroundColor: '#14a800' }}
++          >
++            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
++            {isSyncing ? 'Syncing...' : 'Sync'}
++          </button>
++        </div>
++      </div>
++
++      {/* Not connected banner */}
++      {connectionStatus === 'disconnected' && (
++        <div className="flex items-center gap-3 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
++          <AlertCircle size={18} className="text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
++          <div>
++            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">Upwork not connected</p>
++            <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">Visit Upwork.com while the extension is active to capture your token, then refresh.</p>
++          </div>
++        </div>
++      )}
++
++      {/* Loading */}
++      {isLoading && (
++        <div className="flex items-center justify-center h-48">
++          <img src={gif} alt="Loading" className="w-12 h-12 object-contain" />
++        </div>
++      )}
++
++      {/* Empty state */}
++      {!isLoading && connectionStatus === 'connected' && filtered.length === 0 && (
++        <div className="text-center py-16 text-gray-500 dark:text-gray-400">
++          <Zap size={40} className="mx-auto mb-3 opacity-30" />
++          <p className="font-medium">No projects found</p>
++          <p className="text-sm mt-1">Click Sync to fetch the latest Upwork jobs</p>
++        </div>
++      )}
++
++      {/* Project cards */}
++      {!isLoading && filtered.map(project => {
++        const isExpanded = expandedDescriptions.has(project.id)
++        const desc = project.description || project.snippet || ''
++        return (
++          <div key={project.id} className="bg-white dark:bg-[#1f1f1f] border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-3">
++            <div className="flex items-start justify-between gap-3">
++              <div className="flex-1 min-w-0">
++                <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">{project.title}</h3>
++                <div className="flex items-center gap-3 mt-1 flex-wrap">
++                  {project.budget && (
++                    <span className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
++                      <DollarSign size={13} />
++                      {project.budget}
++                    </span>
++                  )}
++                  {project.posted_at && (
++                    <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-500">
++                      <Clock size={12} />
++                      {project.posted_at}
++                    </span>
++                  )}
++                  {project.skills && (
++                    <div className="flex gap-1 flex-wrap">
++                      {(Array.isArray(project.skills) ? project.skills : project.skills.split(',')).slice(0, 4).map((s, i) => (
++                        <span key={i} className="px-2 py-0.5 text-xs rounded-full bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800">
++                          {s.trim()}
++                        </span>
++                      ))}
++                    </div>
++                  )}
++                </div>
++              </div>
++              <a
++                href={project.url || project.link || `https://www.upwork.com/jobs/${project.id}`}
++                target="_blank"
++                rel="noopener noreferrer"
++                className="flex-shrink-0 p-2 text-gray-400 hover:text-green-600 transition-colors"
++              >
++                <ExternalLink size={16} />
++              </a>
++            </div>
++
++            {desc && (
++              <div>
++                <p className={`text-sm text-gray-600 dark:text-gray-400 ${isExpanded ? '' : 'line-clamp-2'}`}>
++                  {desc}
++                </p>
++                {desc.length > 120 && (
++                  <button
++                    onClick={() => toggleDescription(project.id)}
++                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 mt-1"
++                  >
++                    {isExpanded ? <><ChevronUp size={12} /> Show less</> : <><ChevronDown size={12} /> Show more</>}
++                  </button>
++                )}
++              </div>
++            )}
++          </div>
++        )
++      })}
++    </div>
++  )
++}
++
++export default UpworkProjects
+diff --git a/src/pages/upwork/UpworkSettings.jsx b/src/pages/upwork/UpworkSettings.jsx
+new file mode 100644
+index 0000000..79b3f56
+--- /dev/null
++++ b/src/pages/upwork/UpworkSettings.jsx
+@@ -0,0 +1,277 @@
++import { useState, useEffect } from 'react'
++import { CheckCircle, XCircle, AlertCircle, RefreshCw, Save, Zap, ExternalLink } from 'lucide-react'
++import toast from 'react-hot-toast'
++import gif from '../../assets/gif.gif'
++
++const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
++
++const UpworkSettings = () => {
++  const [connectionStatus, setConnectionStatus] = useState('checking')
++  const [credentials, setCredentials] = useState(null)
++  const [isPageLoaded, setIsPageLoaded] = useState(false)
++  const [isSaving, setIsSaving] = useState(false)
++
++  const [settings, setSettings] = useState(() => {
++    try {
++      const cached = localStorage.getItem('upworkAutoBidSettings')
++      if (cached) return JSON.parse(cached)
++    } catch {}
++    return {
++      enabled: false,
++      daily_bids: 10,
++      max_connects_per_day: 60,
++      frequency_minutes: 15,
++      min_skill_match: 1,
++      smart_bidding: true,
++      payment_verified_only: true,
++      job_categories: [],
++    }
++  })
++
++  useEffect(() => {
++    setIsPageLoaded(true)
++    checkConnection()
++    loadSettings()
++  }, [])
++
++  const checkConnection = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/upwork/status`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setConnectionStatus(data.connected ? 'connected' : 'disconnected')
++        setCredentials(data.profile || null)
++      } else {
++        setConnectionStatus('disconnected')
++      }
++    } catch {
++      setConnectionStatus('disconnected')
++    }
++  }
++
++  const loadSettings = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/upwork/settings`, {
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      if (response.ok) {
++        const data = await response.json()
++        setSettings(prev => ({ ...prev, ...data }))
++        localStorage.setItem('upworkAutoBidSettings', JSON.stringify(data))
++      }
++    } catch {}
++  }
++
++  const saveSettings = async () => {
++    setIsSaving(true)
++    try {
++      const token = localStorage.getItem('token')
++      const response = await fetch(`${API_URL}/api/upwork/settings`, {
++        method: 'POST',
++        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
++        body: JSON.stringify(settings)
++      })
++      if (response.ok) {
++        localStorage.setItem('upworkAutoBidSettings', JSON.stringify(settings))
++        toast.success('Upwork settings saved')
++      } else {
++        toast.error('Failed to save settings')
++      }
++    } catch {
++      toast.error('Failed to save settings')
++    } finally {
++      setIsSaving(false)
++    }
++  }
++
++  const disconnectUpwork = async () => {
++    try {
++      const token = localStorage.getItem('token')
++      await fetch(`${API_URL}/api/upwork/disconnect`, {
++        method: 'POST',
++        headers: { 'Authorization': `Bearer ${token}` }
++      })
++      setConnectionStatus('disconnected')
++      setCredentials(null)
++      toast.success('Upwork disconnected')
++    } catch {
++      toast.error('Failed to disconnect')
++    }
++  }
++
++  if (!isPageLoaded) {
++    return (
++      <div className="flex items-center justify-center h-64">
++        <img src={gif} alt="Loading" className="w-16 h-16 object-contain" />
++      </div>
++    )
++  }
++
++  const statusIcon = connectionStatus === 'connected'
++    ? <CheckCircle size={16} className="text-green-500" />
++    : connectionStatus === 'checking'
++    ? <RefreshCw size={16} className="text-gray-400 animate-spin" />
++    : <XCircle size={16} className="text-red-500" />
++
++  return (
++    <div className="p-6 space-y-6 max-w-2xl">
++      {/* Header */}
++      <div className="flex items-center gap-3">
++        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#14a800' }}>
++          <Zap size={16} className="text-white" />
++        </div>
++        <div>
++          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Upwork Settings</h2>
++          <p className="text-sm text-gray-500 dark:text-gray-400">Manage your Upwork connection and automation</p>
++        </div>
++      </div>
++
++      {/* Connection card */}
++      <div className="bg-white dark:bg-[#1f1f1f] border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-4">
++        <div className="flex items-center justify-between">
++          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Connection Status</h3>
++          <button onClick={checkConnection} className="text-gray-400 hover:text-gray-600 transition-colors">
++            <RefreshCw size={14} />
++          </button>
++        </div>
++
++        <div className="flex items-center gap-3">
++          {statusIcon}
++          <span className={`text-sm font-medium ${
++            connectionStatus === 'connected' ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'
++          }`}>
++            {connectionStatus === 'checking' ? 'Checking...' : connectionStatus === 'connected' ? 'Connected' : 'Not Connected'}
++          </span>
++        </div>
++
++        {credentials && (
++          <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
++            <p className="text-sm text-green-800 dark:text-green-300 font-medium">{credentials.name || 'Upwork Account'}</p>
++            {credentials.username && <p className="text-xs text-green-700 dark:text-green-400">@{credentials.username}</p>}
++          </div>
++        )}
++
++        {connectionStatus === 'disconnected' && (
++          <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
++            <AlertCircle size={15} className="text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
++            <div className="text-xs text-blue-700 dark:text-blue-400">
++              <p className="font-medium mb-1">How to connect Upwork:</p>
++              <ol className="list-decimal list-inside space-y-0.5">
++                <li>Make sure the AK BPO Chrome extension is installed</li>
++                <li>Visit <a href="https://www.upwork.com" target="_blank" rel="noopener noreferrer" className="underline inline-flex items-center gap-0.5">upwork.com <ExternalLink size={10} /></a> and log in</li>
++                <li>The extension will automatically capture your token</li>
++                <li>Refresh this page</li>
++              </ol>
++            </div>
++          </div>
++        )}
++
++        {connectionStatus === 'connected' && (
++          <button onClick={disconnectUpwork} className="text-xs text-red-500 hover:text-red-700 transition-colors">
++            Disconnect Upwork
++          </button>
++        )}
++      </div>
++
++      {/* Auto-bid settings */}
++      <div className="bg-white dark:bg-[#1f1f1f] border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-5">
++        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Auto-Bid Settings</h3>
++
++        <div className="flex items-center justify-between">
++          <div>
++            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Enable Auto-Bidding</p>
++            <p className="text-xs text-gray-500 mt-0.5">Automatically submit proposals on matching jobs</p>
++          </div>
++          <button
++            onClick={() => setSettings(prev => ({ ...prev, enabled: !prev.enabled }))}
++            className={`w-11 h-6 rounded-full transition-colors ${settings.enabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
++          >
++            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform mx-1 ${settings.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
++          </button>
++        </div>
++
++        <div className="grid grid-cols-2 gap-4">
++          <div>
++            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Daily Bid Limit</label>
++            <input
++              type="number"
++              value={settings.daily_bids}
++              onChange={e => setSettings(prev => ({ ...prev, daily_bids: parseInt(e.target.value) || 0 }))}
++              min={1} max={50}
++              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-[#2a2a2a] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2"
++              style={{ '--tw-ring-color': '#14a800' }}
++            />
++          </div>
++          <div>
++            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Max Connects/Day</label>
++            <input
++              type="number"
++              value={settings.max_connects_per_day}
++              onChange={e => setSettings(prev => ({ ...prev, max_connects_per_day: parseInt(e.target.value) || 0 }))}
++              min={1} max={100}
++              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-[#2a2a2a] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2"
++            />
++          </div>
++          <div>
++            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Check Interval (mins)</label>
++            <input
++              type="number"
++              value={settings.frequency_minutes}
++              onChange={e => setSettings(prev => ({ ...prev, frequency_minutes: parseInt(e.target.value) || 0 }))}
++              min={5} max={120}
++              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-[#2a2a2a] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2"
++            />
++          </div>
++          <div>
++            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Min Skill Match</label>
++            <input
++              type="number"
++              value={settings.min_skill_match}
++              onChange={e => setSettings(prev => ({ ...prev, min_skill_match: parseInt(e.target.value) || 0 }))}
++              min={1} max={10}
++              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-[#2a2a2a] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2"
++            />
++          </div>
++        </div>
++
++        <div className="flex items-center justify-between pt-2">
++          <div className="flex items-center gap-4">
++            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
++              <input
++                type="checkbox"
++                checked={settings.smart_bidding}
++                onChange={e => setSettings(prev => ({ ...prev, smart_bidding: e.target.checked }))}
++                className="rounded"
++              />
++              Smart bidding
++            </label>
++            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
++              <input
++                type="checkbox"
++                checked={settings.payment_verified_only}
++                onChange={e => setSettings(prev => ({ ...prev, payment_verified_only: e.target.checked }))}
++                className="rounded"
++              />
++              Payment verified only
++            </label>
++          </div>
++          <button
++            onClick={saveSettings}
++            disabled={isSaving}
++            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50"
++            style={{ backgroundColor: '#14a800' }}
++          >
++            <Save size={14} />
++            {isSaving ? 'Saving...' : 'Save'}
++          </button>
++        </div>
++      </div>
++    </div>
++  )
++}
++
++export default UpworkSettings
+-- 
+2.39.5 (Apple Git-154)
+
