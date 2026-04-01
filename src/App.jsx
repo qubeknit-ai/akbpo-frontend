@@ -20,6 +20,17 @@ import FreelancerBids from './pages/freelancer/FreelancerBids'
 import FreelancerMessages from './pages/freelancer/FreelancerMessages'
 import AutoBidLogs from './pages/freelancer/AutoBidLogs'
 import FreelancerSettings from './pages/freelancer/FreelancerSettings'
+
+import UpworkProjects from './pages/upwork/UpworkProjects'
+import UpworkBids from './pages/upwork/UpworkBids'
+import UpworkAutoBid from './pages/upwork/UpworkAutoBid'
+import UpworkSettings from './pages/upwork/UpworkSettings'
+
+import GuruProjects from './pages/guru/GuruProjects'
+import GuruBids from './pages/guru/GuruBids'
+import GuruAutoBid from './pages/guru/GuruAutoBid'
+import GuruSettings from './pages/guru/GuruSettings'
+
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 
@@ -231,6 +242,25 @@ function App() {
         return { title: 'Freelancer Settings', description: 'Manage your Freelancer.com connection and automation' }
       case 'freelancer-logs':
         return { title: 'Auto Bidding', description: '' }
+
+      case 'upwork-projects':
+        return { title: 'Upwork Projects', description: '' }
+      case 'upwork-bids':
+        return { title: 'Upwork Bids', description: '' }
+      case 'upwork-autobid':
+        return { title: 'Upwork Auto Bid', description: '' }
+      case 'upwork-settings':
+        return { title: 'Upwork Settings', description: 'Manage your Upwork connection and automation' }
+
+      case 'guru-projects':
+        return { title: 'Guru Projects', description: '' }
+      case 'guru-bids':
+        return { title: 'Guru Quotes', description: '' }
+      case 'guru-autobid':
+        return { title: 'Guru Auto Quote', description: '' }
+      case 'guru-settings':
+        return { title: 'Guru Settings', description: 'Manage your Guru.com connection and automation' }
+
       default:
         return { title: 'Dashboard', description: 'Overview of your lead management' }
     }
@@ -279,6 +309,25 @@ function App() {
         return <AutoBidLogs />
       case 'freelancer-settings':
         return <FreelancerSettings />
+
+      case 'upwork-projects':
+        return <UpworkProjects />
+      case 'upwork-bids':
+        return <UpworkBids />
+      case 'upwork-autobid':
+        return <UpworkAutoBid />
+      case 'upwork-settings':
+        return <UpworkSettings />
+
+      case 'guru-projects':
+        return <GuruProjects />
+      case 'guru-bids':
+        return <GuruBids />
+      case 'guru-autobid':
+        return <GuruAutoBid />
+      case 'guru-settings':
+        return <GuruSettings />
+
       default:
         return <Leads refreshTrigger={refreshLeads} />
     }

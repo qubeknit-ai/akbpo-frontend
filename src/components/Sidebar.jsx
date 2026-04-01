@@ -23,6 +23,14 @@ const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
     const cached = localStorage.getItem('freelancerMenuExpanded')
     return cached === 'true'
   })
+  const [upworkExpanded, setUpworkExpanded] = useState(() => {
+    const cached = localStorage.getItem('upworkMenuExpanded')
+    return cached === 'true'
+  })
+  const [guruExpanded, setGuruExpanded] = useState(() => {
+    const cached = localStorage.getItem('guruMenuExpanded')
+    return cached === 'true'
+  })
 
   const sidebarRef = useRef(null)
 
@@ -96,6 +104,22 @@ const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
     { id: 'freelancer-settings', label: 'Settings', icon: Settings },
   ]
 
+  // Upwork sub-menu items
+  const upworkMenuItems = [
+    { id: 'upwork-projects', label: 'Projects', icon: FolderOpen },
+    { id: 'upwork-bids', label: 'Bids', icon: Briefcase },
+    { id: 'upwork-autobid', label: 'Auto Bid', icon: Zap },
+    { id: 'upwork-settings', label: 'Settings', icon: Settings },
+  ]
+
+  // Guru sub-menu items
+  const guruMenuItems = [
+    { id: 'guru-projects', label: 'Projects', icon: FolderOpen },
+    { id: 'guru-bids', label: 'Quotes', icon: Briefcase },
+    { id: 'guru-autobid', label: 'Auto Quote', icon: Zap },
+    { id: 'guru-settings', label: 'Settings', icon: Settings },
+  ]
+
   // Admin sub-menu items
   const adminMenuItems = [
     { id: 'admin-dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -119,6 +143,18 @@ const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
     const newState = !freelancerExpanded
     setFreelancerExpanded(newState)
     localStorage.setItem('freelancerMenuExpanded', newState.toString())
+  }
+
+  const toggleUpworkMenu = () => {
+    const newState = !upworkExpanded
+    setUpworkExpanded(newState)
+    localStorage.setItem('upworkMenuExpanded', newState.toString())
+  }
+
+  const toggleGuruMenu = () => {
+    const newState = !guruExpanded
+    setGuruExpanded(newState)
+    localStorage.setItem('guruMenuExpanded', newState.toString())
   }
 
   return (
@@ -193,42 +229,115 @@ const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
 
                 {/* Freelancer Section - Show after Leads */}
                 {item.id === 'leads' && (
-                  <div className="mt-1">
-                    <button
-                      onClick={toggleFreelancerMenu}
-                      className="w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl transition-all text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M14.096 3.076l1.634 2.292L24 3.076M5.503 20.924l4.474-4.374-2.692-2.89m6.133-10.584L11.027 5.23l4.022.15M4.124 3.077l.857 1.76 4.734.294m-3.058 7.072l3.497-6.522L0 5.13" />
-                        </svg>
-                        <span className="text-sm font-medium">Freelancer</span>
-                      </div>
-                      {freelancerExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                    </button>
+                  <div className="mt-1 space-y-1">
+                    {/* Freelancer */}
+                    <div>
+                      <button
+                        onClick={toggleFreelancerMenu}
+                        className="w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl transition-all text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M14.096 3.076l1.634 2.292L24 3.076M5.503 20.924l4.474-4.374-2.692-2.89m6.133-10.584L11.027 5.23l4.022.15M4.124 3.077l.857 1.76 4.734.294m-3.058 7.072l3.497-6.522L0 5.13" />
+                          </svg>
+                          <span className="text-sm font-medium">Freelancer</span>
+                        </div>
+                        {freelancerExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      </button>
+                      {freelancerExpanded && (
+                        <div className="ml-4 mt-1 space-y-1">
+                          {freelancerMenuItems.map((item) => {
+                            const Icon = item.icon
+                            const isActive = currentPage === item.id
+                            return (
+                              <button
+                                key={item.id}
+                                onClick={() => handleMenuClick(item.id)}
+                                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-sm ${isActive
+                                  ? 'bg-gray-100 dark:bg-[#1e1e1e] text-gray-900 dark:text-gray-300'
+                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+                                  }`}
+                              >
+                                <Icon size={14} strokeWidth={2} />
+                                <span>{item.label}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
 
-                    {/* Freelancer Sub-menu */}
-                    {freelancerExpanded && (
-                      <div className="ml-4 mt-1 space-y-1">
-                        {freelancerMenuItems.map((item) => {
-                          const Icon = item.icon
-                          const isActive = currentPage === item.id
-                          return (
-                            <button
-                              key={item.id}
-                              onClick={() => handleMenuClick(item.id)}
-                              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-sm ${isActive
-                                ? 'bg-gray-100 dark:bg-[#1e1e1e] text-gray-900 dark:text-gray-300'
-                                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
-                                }`}
-                            >
-                              <Icon size={14} strokeWidth={2} />
-                              <span>{item.label}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
+                    {/* Upwork */}
+                    <div>
+                      <button
+                        onClick={toggleUpworkMenu}
+                        className="w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl transition-all text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#14a800">
+                            <path d="M18.561 13.158c-1.102 0-2.135-.467-3.074-1.227l.228-1.076.008-.042c.207-1.143.849-3.06 2.839-3.06 1.492 0 2.703 1.212 2.703 2.703-.001 1.489-1.212 2.702-2.704 2.702zm0-8.14c-2.539 0-4.51 1.649-5.31 4.366-1.22-1.834-2.148-4.036-2.687-5.892H7.828v7.112c-.002 1.406-1.141 2.546-2.547 2.546-1.405 0-2.543-1.14-2.545-2.546V3.492H0v7.112c0 2.914 2.37 5.303 5.281 5.303 2.913 0 5.283-2.389 5.283-5.303v-1.19c.529 1.107 1.182 2.229 1.974 3.221l-1.673 7.873h2.797l1.213-5.71c1.063.679 2.285 1.109 3.686 1.109 3 0 5.439-2.452 5.439-5.45 0-3-2.439-5.439-5.439-5.439z"/>
+                          </svg>
+                          <span className="text-sm font-medium">Upwork</span>
+                        </div>
+                        {upworkExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      </button>
+                      {upworkExpanded && (
+                        <div className="ml-4 mt-1 space-y-1">
+                          {upworkMenuItems.map((item) => {
+                            const Icon = item.icon
+                            const isActive = currentPage === item.id
+                            return (
+                              <button
+                                key={item.id}
+                                onClick={() => handleMenuClick(item.id)}
+                                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-sm ${isActive
+                                  ? 'bg-gray-100 dark:bg-[#1e1e1e] text-gray-900 dark:text-gray-300'
+                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+                                  }`}
+                              >
+                                <Icon size={14} strokeWidth={2} />
+                                <span>{item.label}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Guru */}
+                    <div>
+                      <button
+                        onClick={toggleGuruMenu}
+                        className="w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl transition-all text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-4 h-4 rounded-sm text-xs font-bold flex items-center justify-center text-white" style={{ backgroundColor: '#f47c20', fontSize: '10px' }}>G</span>
+                          <span className="text-sm font-medium">Guru</span>
+                        </div>
+                        {guruExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      </button>
+                      {guruExpanded && (
+                        <div className="ml-4 mt-1 space-y-1">
+                          {guruMenuItems.map((item) => {
+                            const Icon = item.icon
+                            const isActive = currentPage === item.id
+                            return (
+                              <button
+                                key={item.id}
+                                onClick={() => handleMenuClick(item.id)}
+                                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-sm ${isActive
+                                  ? 'bg-gray-100 dark:bg-[#1e1e1e] text-gray-900 dark:text-gray-300'
+                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+                                  }`}
+                              >
+                                <Icon size={14} strokeWidth={2} />
+                                <span>{item.label}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
