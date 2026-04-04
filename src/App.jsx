@@ -33,6 +33,8 @@ import GuruSettings from './pages/guru/GuruSettings'
 
 import Login from './pages/Login'
 import Signup from './pages/Signup'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 
 import MatrixRain from './components/MatrixRain'
 import logo from './assets/logo.png'
@@ -62,6 +64,12 @@ function App() {
   const [refreshLeads, setRefreshLeads] = useState(0)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [showSignup, setShowSignup] = useState(false)
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
+  const [resetToken, setResetToken] = useState(() => {
+    // Check if user landed on the page via a reset link
+    const params = new URLSearchParams(window.location.search)
+    return params.get('token') || null
+  })
   const [isLoading, setIsLoading] = useState(true)
   const [userRole, setUserRole] = useState(() => {
     // Load from cache immediately
@@ -360,6 +368,32 @@ function App() {
   }
 
   if (!isAuthenticated) {
+    // Password reset link — show reset form
+    if (resetToken) {
+      return (
+        <ResetPassword
+          token={resetToken}
+          onSuccess={() => {
+            setResetToken(null)
+            setShowSignup(false)
+            setShowForgotPassword(false)
+          }}
+          onBackToLogin={() => {
+            setResetToken(null)
+            window.history.replaceState({}, document.title, '/')
+          }}
+        />
+      )
+    }
+
+    if (showForgotPassword) {
+      return (
+        <ForgotPassword
+          onBackToLogin={() => setShowForgotPassword(false)}
+        />
+      )
+    }
+
     return showSignup ? (
       <Signup
         onSignupSuccess={handleSignupSuccess}
@@ -369,6 +403,7 @@ function App() {
       <Login
         onLoginSuccess={handleLoginSuccess}
         onSwitchToSignup={() => setShowSignup(true)}
+        onForgotPassword={() => setShowForgotPassword(true)}
       />
     )
   }

@@ -7,7 +7,7 @@ import icon from '../assets/icon.png'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-const Login = ({ onLoginSuccess, onSwitchToSignup }) => {
+const Login = ({ onLoginSuccess, onSwitchToSignup, onForgotPassword }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -143,6 +143,13 @@ const Login = ({ onLoginSuccess, onSwitchToSignup }) => {
                 />
                 <span className="ml-2 text-gray-600">Remember me</span>
               </label>
+              <button
+                type="button"
+                onClick={onForgotPassword}
+                className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+              >
+                Forgot password?
+              </button>
             </div>
 
             <button
