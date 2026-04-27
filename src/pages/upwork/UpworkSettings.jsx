@@ -384,6 +384,7 @@ const UpworkSettings = () => {
                 <option value={1}>Proposal 1</option>
                 <option value={2}>Proposal 2</option>
                 <option value={3}>Proposal 3</option>
+                <option value={4}>Proposal 4</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">Select which proposal template to use for auto-bidding</p>
             </div>
