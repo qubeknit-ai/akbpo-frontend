@@ -31,6 +31,10 @@ const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
     const cached = localStorage.getItem('guruMenuExpanded')
     return cached === 'true'
   })
+  const [truelancerExpanded, setTruelancerExpanded] = useState(() => {
+    const cached = localStorage.getItem('truelancerMenuExpanded')
+    return cached === 'true'
+  })
 
   const sidebarRef = useRef(null)
 
@@ -120,6 +124,13 @@ const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
     { id: 'guru-settings', label: 'Settings', icon: Settings },
   ]
 
+  // Truelancer sub-menu items
+  const truelancerMenuItems = [
+    { id: 'truelancer-jobs', label: 'Jobs', icon: FolderOpen },
+    { id: 'truelancer-bids', label: 'Bids', icon: Briefcase },
+    { id: 'truelancer-settings', label: 'Settings', icon: Settings },
+  ]
+
   // Admin sub-menu items
   const adminMenuItems = [
     { id: 'admin-dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -155,6 +166,12 @@ const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
     const newState = !guruExpanded
     setGuruExpanded(newState)
     localStorage.setItem('guruMenuExpanded', newState.toString())
+  }
+
+  const toggleTruelancerMenu = () => {
+    const newState = !truelancerExpanded
+    setTruelancerExpanded(newState)
+    localStorage.setItem('truelancerMenuExpanded', newState.toString())
   }
 
   return (
@@ -319,6 +336,41 @@ const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
                       {guruExpanded && (
                         <div className="ml-4 mt-1 space-y-1">
                           {guruMenuItems.map((item) => {
+                            const Icon = item.icon
+                            const isActive = currentPage === item.id
+                            return (
+                              <button
+                                key={item.id}
+                                onClick={() => handleMenuClick(item.id)}
+                                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-sm ${isActive
+                                  ? 'bg-gray-100 dark:bg-[#1e1e1e] text-gray-900 dark:text-gray-300'
+                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+                                  }`}
+                              >
+                                <Icon size={14} strokeWidth={2} />
+                                <span>{item.label}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Truelancer */}
+                    <div>
+                      <button
+                        onClick={toggleTruelancerMenu}
+                        className="w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl transition-all text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-4 h-4 rounded-sm text-xs font-bold flex items-center justify-center text-white bg-blue-600" style={{ fontSize: '10px' }}>T</span>
+                          <span className="text-sm font-medium">Truelancer</span>
+                        </div>
+                        {truelancerExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      </button>
+                      {truelancerExpanded && (
+                        <div className="ml-4 mt-1 space-y-1">
+                          {truelancerMenuItems.map((item) => {
                             const Icon = item.icon
                             const isActive = currentPage === item.id
                             return (

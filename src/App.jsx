@@ -31,6 +31,10 @@ import GuruBids from './pages/guru/GuruBids'
 import GuruAutoBid from './pages/guru/GuruAutoBid'
 import GuruSettings from './pages/guru/GuruSettings'
 
+import TruelancerSettings from './pages/truelancer/TruelancerSettings'
+import TruelancerBids from './pages/truelancer/TruelancerBids'
+import TruelancerJobs from './pages/truelancer/TruelancerJobs'
+
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import ForgotPassword from './pages/ForgotPassword'
@@ -269,6 +273,13 @@ function App() {
       case 'guru-settings':
         return { title: 'Guru Settings', description: 'Manage your Guru.com connection and automation' }
 
+      case 'truelancer-bids':
+        return { title: 'Truelancer Bids', description: '' }
+      case 'truelancer-settings':
+        return { title: 'Truelancer Settings', description: 'Manage your Truelancer connection and automation' }
+      case 'truelancer-jobs':
+        return { title: 'Recommended Jobs', description: 'Personalized opportunities based on your skills' }
+
       default:
         return { title: 'Dashboard', description: 'Overview of your lead management' }
     }
@@ -335,6 +346,14 @@ function App() {
         return <GuruAutoBid />
       case 'guru-settings':
         return <GuruSettings />
+
+      case 'truelancer-bids':
+        return <TruelancerBids />
+      case 'truelancer-settings':
+        return <TruelancerSettings />
+      case 'truelancer-jobs':
+        return <TruelancerJobs />
+
 
       default:
         return <Leads refreshTrigger={refreshLeads} />

@@ -211,7 +211,7 @@ const BidModal = ({
                 Placing Your Bid
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Submitting bid of ${bidAmount} to Freelancer...
+                Submitting bid of ${bidAmount} to {lead?.platform || 'Freelancer'}...
               </p>
             </div>
           )}
@@ -226,7 +226,7 @@ const BidModal = ({
                 Bid Placed Successfully!
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Your bid of ${bidAmount} has been submitted to Freelancer.
+                Your bid of ${bidAmount} has been submitted to {lead?.platform || 'Freelancer'}.
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Modal will close automatically in 5 seconds...
