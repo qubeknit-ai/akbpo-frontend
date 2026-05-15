@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Toaster } from 'react-hot-toast'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import Sidebar from './components/Sidebar'
@@ -12,8 +12,6 @@ import Analytics from './pages/Analytics'
 import CRM from './pages/CRM'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminUsers from './pages/AdminUsers'
-import AdminSettings from './pages/AdminSettings'
-import AdminAnalytics from './pages/AdminAnalytics'
 
 import FreelancerProjects from './pages/freelancer/FreelancerProjects'
 import FreelancerBids from './pages/freelancer/FreelancerBids'
@@ -34,6 +32,7 @@ import GuruSettings from './pages/guru/GuruSettings'
 import TruelancerSettings from './pages/truelancer/TruelancerSettings'
 import TruelancerBids from './pages/truelancer/TruelancerBids'
 import TruelancerJobs from './pages/truelancer/TruelancerJobs'
+import TruelancerAutoBidLogs from './pages/truelancer/TruelancerAutoBidLogs'
 
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -45,6 +44,7 @@ import logo from './assets/logo.png'
 import gif from './assets/gif.gif'
 import { logError } from './utils/logger'
 import freelancerSync from './utils/freelancerSync'
+import { clearApiCache } from './utils/apiUtils'
 
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -80,6 +80,8 @@ function App() {
     const cached = sessionStorage.getItem('userRole')
     return cached || 'user'
   })
+  // Prevent StrictMode from firing verifyToken twice in parallel
+  const isVerifying = useRef(false)
 
   useEffect(() => {
     verifyToken()
@@ -150,6 +152,9 @@ function App() {
   }, [currentPage])
 
   const verifyToken = async () => {
+    if (isVerifying.current) return
+    isVerifying.current = true
+
     const token = localStorage.getItem('token')
 
     if (!token) {
@@ -214,6 +219,8 @@ function App() {
     localStorage.removeItem('currentPage')
     sessionStorage.removeItem('userRole')
     sessionStorage.removeItem('userProfileData')
+    // Wipe all persistent API cache so the next login gets fresh data
+    clearApiCache()
     setIsAuthenticated(false)
     setUserRole('user')
     setCurrentPage('dashboard')
@@ -239,10 +246,6 @@ function App() {
         return { title: 'Admin', description: 'System-wide statistics and metrics' }
       case 'admin-users':
         return { title: 'Admin', description: 'Manage users, roles, and stats' }
-      case 'admin-settings':
-        return { title: 'Admin', description: 'Configure global system settings' }
-      case 'admin-analytics':
-        return { title: 'Admin', description: 'System performance and usage insights' }
 
       case 'freelancer-projects':
         return { title: 'Available Projects', description: '' }
@@ -279,6 +282,8 @@ function App() {
         return { title: 'Truelancer Settings', description: 'Manage your Truelancer connection and automation' }
       case 'truelancer-jobs':
         return { title: 'Recommended Jobs', description: 'Personalized opportunities based on your skills' }
+      case 'truelancer-logs':
+        return { title: 'Truelancer Auto Bidding', description: 'Track automated bidding activity' }
 
       default:
         return { title: 'Dashboard', description: 'Overview of your lead management' }
@@ -313,10 +318,6 @@ function App() {
         return <AdminDashboard />
       case 'admin-users':
         return <AdminUsers />
-      case 'admin-settings':
-        return <AdminSettings />
-      case 'admin-analytics':
-        return <AdminAnalytics />
 
       case 'freelancer-projects':
         return <FreelancerProjects />
@@ -353,6 +354,8 @@ function App() {
         return <TruelancerSettings />
       case 'truelancer-jobs':
         return <TruelancerJobs />
+      case 'truelancer-logs':
+        return <TruelancerAutoBidLogs />
 
 
       default:

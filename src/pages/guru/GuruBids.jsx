@@ -1,157 +1,278 @@
 import { useState, useEffect } from 'react'
-import { DollarSign, Clock, AlertCircle, RefreshCw, CheckCircle, XCircle, Hourglass, ExternalLink } from 'lucide-react'
-import toast from 'react-hot-toast'
+import { RefreshCw, TrendingUp, CheckCircle, XCircle, Clock, Target, Award, ExternalLink } from 'lucide-react'
 import gif from '../../assets/gif.gif'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const GURU_COLOR = '#f47c20'
 
-const STATUS_CONFIG = {
-  accepted: { icon: CheckCircle, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', label: 'Accepted' },
-  rejected: { icon: XCircle, color: 'text-red-500 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', label: 'Rejected' },
-  pending: { icon: Hourglass, color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-900/20', label: 'Pending' },
+const STATUS_COLORS = {
+  submitted: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  accepted: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  pending: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+  hired: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+  failed: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 }
 
 const GuruBids = () => {
   const [bids, setBids] = useState([])
+  const [stats, setStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [filter, setFilter] = useState('all')
-  const [connectionStatus, setConnectionStatus] = useState('checking')
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [filterStatus, setFilterStatus] = useState('all')
+
+  const PER_PAGE = 20
 
   useEffect(() => {
-    checkConnection()
+    loadAll()
   }, [])
 
   useEffect(() => {
-    if (connectionStatus === 'connected') loadBids()
-  }, [filter, connectionStatus])
+    loadBids()
+  }, [currentPage, filterStatus])
 
-  const checkConnection = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/api/guru/status`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setConnectionStatus(data.connected ? 'connected' : 'disconnected')
-      } else {
-        setConnectionStatus('disconnected')
-      }
-    } catch {
-      setConnectionStatus('disconnected')
-    }
+  const loadAll = async () => {
+    setIsLoading(true)
+    await Promise.all([loadBids(), loadStats()])
+    setIsLoading(false)
   }
 
   const loadBids = async () => {
-    setIsLoading(true)
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/api/guru/bids?filter=${filter}`, {
+      const params = new URLSearchParams({ page: currentPage, per_page: PER_PAGE })
+      if (filterStatus !== 'all') params.set('filter', filterStatus)
+
+      const res = await fetch(`${API_URL}/api/guru/bids?${params}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
-      if (response.ok) {
-        const data = await response.json()
-        setBids(data.bids || data || [])
-      } else {
-        setBids([])
+      if (res.ok) {
+        const data = await res.json()
+        const bidsList = data.bids || []
+        setBids(bidsList)
+        if (data.total) setTotalPages(Math.ceil(data.total / PER_PAGE))
+
+        setStats(prev => ({
+          ...prev,
+          total_bids: data.total || 0,
+          bids_today: prev?.bids_today || 0,
+        }))
       }
-    } catch {
-      toast.error('Failed to load Guru bids')
-      setBids([])
-    } finally {
-      setIsLoading(false)
-    }
+    } catch {}
+  }
+
+  const loadStats = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`${API_URL}/api/guru/autobid/stats`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setStats(prev => ({ ...prev, ...data }))
+      }
+    } catch {}
+  }
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    await loadAll()
+    setIsRefreshing(false)
+  }
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A'
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
+  const getStatusBadge = (status) => {
+    const normalized = (status || 'pending').toLowerCase()
+    const colorClass = STATUS_COLORS[normalized] || STATUS_COLORS.pending
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${colorClass}`}>
+        {normalized.charAt(0).toUpperCase() + normalized.slice(1)}
+      </span>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <img src={gif} alt="Loading" className="h-12 object-contain" />
+        <p className="text-gray-600 dark:text-gray-400">Loading bid history...</p>
+      </div>
+    )
   }
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm" style={{ backgroundColor: GURU_COLOR }}>G</div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">My Guru Quotes</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{bids.length} quotes</p>
+
+      {/* Stats Overview */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-[#1f1f1f] rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
+                <Target className="w-5 h-5" />
+              </div>
+              <span className="text-sm text-gray-600 dark:text-gray-400">Total Bids</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.total_bids ?? 0}</p>
+          </div>
+
+          <div className="bg-white dark:bg-[#1f1f1f] rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-lg bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400">
+                <CheckCircle className="w-5 h-5" />
+              </div>
+              <span className="text-sm text-gray-600 dark:text-gray-400">Today</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.bids_today ?? 0}</p>
+          </div>
+
+          <div className="bg-white dark:bg-[#1f1f1f] rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-lg bg-purple-100 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400">
+                <Award className="w-5 h-5" />
+              </div>
+              <span className="text-sm text-gray-600 dark:text-gray-400">This Week</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.bids_week ?? 0}</p>
+          </div>
+
+          <div className="bg-white dark:bg-[#1f1f1f] rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-lg bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20 dark:text-yellow-400">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+              <span className="text-sm text-gray-600 dark:text-gray-400">Success</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.success_week ?? 0}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {['all', 'pending', 'accepted', 'rejected'].map(f => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg capitalize transition-colors ${
-                filter === f ? 'text-white' : 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800'
-              }`}
-              style={filter === f ? { backgroundColor: GURU_COLOR } : {}}
+      )}
+
+      {/* Bid History Table */}
+      <div className="bg-white dark:bg-[#1f1f1f] rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Quote History</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">All quotes submitted via Auto Bidder</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={filterStatus}
+              onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1) }}
+              className="px-3 py-2 bg-gray-50 dark:bg-[#2a2a2a] border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 focus:outline-none"
             >
-              {f}
+              <option value="all">All Status</option>
+              <option value="submitted">Submitted</option>
+              <option value="pending">Pending</option>
+              <option value="accepted">Accepted</option>
+              <option value="hired">Hired</option>
+              <option value="rejected">Rejected</option>
+              <option value="failed">Failed</option>
+            </select>
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
-          ))}
-          <button onClick={loadBids} disabled={isLoading} className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-            <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
-          </button>
+          </div>
         </div>
-      </div>
 
-      {connectionStatus === 'disconnected' && (
-        <div className="flex items-center gap-3 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
-          <AlertCircle size={18} className="text-yellow-600 flex-shrink-0" />
-          <p className="text-sm text-yellow-800 dark:text-yellow-300">Guru not connected. Visit guru.com with the extension active to connect.</p>
-        </div>
-      )}
-
-      {isLoading && (
-        <div className="flex justify-center py-16">
-          <img src={gif} alt="Loading" className="w-12 h-12 object-contain" />
-        </div>
-      )}
-
-      {!isLoading && connectionStatus === 'connected' && bids.length === 0 && (
-        <div className="text-center py-16 text-gray-500 dark:text-gray-400">
-          <div className="w-10 h-10 rounded-full mx-auto mb-3 opacity-30 flex items-center justify-center text-2xl font-bold">G</div>
-          <p className="font-medium">No quotes yet</p>
-          <p className="text-sm mt-1">Quotes placed via the auto-bidder will appear here</p>
-        </div>
-      )}
-
-      {!isLoading && bids.map(bid => {
-        const statusKey = (bid.status || 'pending').toLowerCase()
-        const cfg = STATUS_CONFIG[statusKey] || STATUS_CONFIG.pending
-        const Icon = cfg.icon
-        return (
-          <div key={bid.id || bid.project_id} className="bg-white dark:bg-[#1f1f1f] border border-gray-200 dark:border-gray-700 rounded-xl p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate">{bid.project_title || bid.title || 'Untitled Project'}</h3>
-                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                  {bid.bid_amount && (
-                    <span className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
-                      <DollarSign size={13} />{bid.bid_amount}
-                    </span>
-                  )}
-                  {bid.submitted_at && (
-                    <span className="flex items-center gap-1 text-xs text-gray-500">
-                      <Clock size={12} />{new Date(bid.submitted_at).toLocaleDateString()}
-                    </span>
-                  )}
-                  <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.color}`}>
-                    <Icon size={11} />{cfg.label}
-                  </span>
-                </div>
-                {bid.proposal_text && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">{bid.proposal_text}</p>
-                )}
-              </div>
-              {bid.project_url && (
-                <a href={bid.project_url} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-orange-500 transition-colors flex-shrink-0">
-                  <ExternalLink size={15} />
-                </a>
-              )}
+        {bids.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-4">
+            <Clock className="w-12 h-12 text-gray-300 dark:text-gray-600" />
+            <div className="text-center">
+              <p className="text-gray-600 dark:text-gray-400 font-medium">No quotes yet</p>
+              <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
+                Enable the Auto Bidder in Settings to start submitting quotes
+              </p>
             </div>
           </div>
-        )
-      })}
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#252525]">
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Project</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Amount</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
+                    <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {bids.map((bid, index) => (
+                    <tr key={bid.id || index} className="hover:bg-gray-50 dark:hover:bg-[#252525] transition-colors">
+                      <td className="py-3 px-4">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2 max-w-xs">
+                          {bid.project_title || `Project #${bid.id || index + 1}`}
+                        </p>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {bid.bid_amount ? `$${bid.bid_amount}` : 'N/A'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">{getStatusBadge(bid.status)}</td>
+                      <td className="py-3 px-4">
+                        <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                          {formatDate(bid.submitted_at)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        {bid.project_url && (
+                          <a
+                            href={bid.project_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+                            style={{ color: GURU_COLOR, backgroundColor: '#fff7f0' }}
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            View
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Page {currentPage} of {totalPages}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }

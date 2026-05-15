@@ -7,6 +7,7 @@ import EditTalentModal from '../modals/EditTalentModal'
 import ConfirmModal from '../modals/ConfirmModal'
 import toast from 'react-hot-toast'
 import { logError } from '../utils/logger'
+import { apiCache, getCached, invalidateCache } from '../utils/apiUtils'
 
 const TALENT_WEBHOOK_URL = 'https://n8n.srv1128153.hstgr.cloud/webhook/talent'
 const RECOMMENDED_KEYWORDS = [
@@ -1469,10 +1470,24 @@ const normalizeTalents = (raw) => {
 const Talent = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedKeywords, setSelectedKeywords] = useState([])
-  const [talents, setTalents] = useState([])
-  const [isLoading, setIsLoading] = useState(false)
+  
+  // PERFORMANCE: Load saved talents from persistent cache immediately
+  const [savedTalents, setSavedTalents] = useState(() => {
+    const cached = getCached('talents')
+    return cached?.talents ? normalizeSavedTalentsStatic(cached.talents) : []
+  })
+  
+  const [talents, setTalents] = useState(savedTalents)
+  const [isLoading, setIsLoading] = useState(!savedTalents.length)
   const [error, setError] = useState('')
-  const [lastFetchedAt, setLastFetchedAt] = useState(null)
+  const [lastFetchedAt, setLastFetchedAt] = useState(() => {
+    try {
+      const raw = localStorage.getItem('apicache__talents')
+      if (raw) return new Date(JSON.parse(raw).timestamp)
+    } catch (e) {}
+    return null
+  })
+  
   const [selectedTalent, setSelectedTalent] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -1484,7 +1499,6 @@ const Talent = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [talentToEdit, setTalentToEdit] = useState(null)
   const [showSavedTalents, setShowSavedTalents] = useState(true)
-  const [savedTalents, setSavedTalents] = useState([])
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
   const [talentToDelete, setTalentToDelete] = useState(null)
 
@@ -1540,25 +1554,17 @@ const Talent = () => {
       const payload = await response.json()
       const normalized = normalizeTalents(payload)
 
-      // Check which talents are already saved
-      const token = localStorage.getItem('token')
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-      
+      // Check which talents are already saved using cache
       try {
-        const savedResponse = await fetch(`${API_BASE_URL}/api/talents`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
+        const savedData = await apiCache.fetchTalents()
         
-        if (savedResponse.ok) {
-          const savedData = await savedResponse.json()
-          const savedNames = savedData.talents.map(t => t.name.toLowerCase())
+        if (savedData && savedData.talents) {
+          const savedNames = new Set(savedData.talents.map(t => t.name.toLowerCase()))
           
           // Mark talents as saved if they exist in saved list
           const markedTalents = normalized.map(talent => ({
             ...talent,
-            isSaved: savedNames.includes(talent.name.toLowerCase())
+            isSaved: savedNames.has(talent.name.toLowerCase())
           }))
           
           setTalents(markedTalents)
@@ -1655,8 +1661,8 @@ const Talent = () => {
       // Show success toast
       toast.success('Talent deleted successfully!')
       
-      // Refresh saved talents
-      fetchSavedTalents()
+      // Refresh saved talents (invalidate cache)
+      fetchSavedTalents(true)
       
       // Reset state
       setTalentToDelete(null)
@@ -1670,9 +1676,9 @@ const Talent = () => {
   const handleAddTalentSuccess = (newTalent) => {
     // Add to saved talents list
     setSavedTalents(prev => [newTalent, ...prev])
-    // If currently viewing saved talents, refresh the view
+    // If currently viewing saved talents, refresh the view (invalidate cache)
     if (showSavedTalents) {
-      fetchSavedTalents()
+      fetchSavedTalents(true)
     }
     // Show success toast
     toast.success('Talent added successfully!')
@@ -1684,79 +1690,62 @@ const Talent = () => {
   }
 
   const handleEditTalentSuccess = (updatedTalent) => {
-    // Refresh saved talents
-    fetchSavedTalents()
+    // Refresh saved talents (invalidate cache)
+    fetchSavedTalents(true)
     // Show success toast
     toast.success('Talent updated successfully!')
   }
 
-  const fetchSavedTalents = async () => {
+  const fetchSavedTalents = async (force = false) => {
     setIsLoading(true)
     setError('')
 
     try {
-      const token = localStorage.getItem('token')
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-      
-      const response = await fetch(`${API_BASE_URL}/api/talents`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+      if (force) invalidateCache('talents')
+      const data = await apiCache.fetchTalents()
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch saved talents')
+      if (data && data.talents) {
+        const normalized = normalizeSavedTalentsStatic(data.talents)
+        setSavedTalents(normalized)
+        setTalents(normalized)
+        setShowSavedTalents(true)
+        setLastFetchedAt(new Date())
       }
-
-      const data = await response.json()
-      const normalized = normalizeSavedTalents(data.talents || [])
-      setSavedTalents(normalized)
-      setTalents(normalized)
-      setShowSavedTalents(true)
-      setLastFetchedAt(new Date())
     } catch (err) {
       logError('Saved talents fetch failed', err)
-      setError(err.message || 'Unable to fetch saved talents. Please try again.')
+      setError('Unable to fetch saved talents.')
       setSavedTalents([])
     } finally {
       setIsLoading(false)
     }
   }
 
-  const normalizeSavedTalents = (savedList) => {
-    return savedList.map((item) => ({
-      id: item.id,
-      name: item.name,
-      profileUrl: item.profile_url || '',
-      country: item.location || '',
-      detail: item.description || 'No description provided',
-      category: Array.isArray(item.skills) ? item.skills.slice(0, 3).join(', ') : '—',
-      rating: item.rating !== undefined && item.rating !== null ? item.rating : '—',
-      charges: item.rate ? `$${item.rate}/h` : '—',
-      reviews: item.reviews !== undefined && item.reviews !== null ? item.reviews : '—',
-      bio: item.description || '',
-      tagline: '',
-      skills: Array.isArray(item.skills) ? item.skills : [],
-      earnings: '',
-      image: item.image_url || '',
-      isSaved: true,
-      savedId: item.id
-    }))
-  }
+
+const normalizeSavedTalentsStatic = (savedList) => {
+  return savedList.map((item) => ({
+    id: item.id,
+    name: item.name,
+    profileUrl: item.profile_url || '',
+    country: item.location || '',
+    detail: item.description || 'No description provided',
+    category: Array.isArray(item.skills) ? item.skills.slice(0, 3).join(', ') : '—',
+    rating: item.rating !== undefined && item.rating !== null ? item.rating : '—',
+    charges: item.rate ? `$${item.rate}/h` : '—',
+    reviews: item.reviews !== undefined && item.reviews !== null ? item.reviews : '—',
+    bio: item.description || '',
+    tagline: '',
+    skills: Array.isArray(item.skills) ? item.skills : [],
+    earnings: '',
+    image: item.image_url || '',
+    isSaved: true,
+    savedId: item.id
+  }))
+}
 
   const checkIfTalentSaved = async (talentName) => {
     try {
-      const token = localStorage.getItem('token')
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-      
-      const response = await fetch(`${API_BASE_URL}/api/talents`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
+      const data = await apiCache.fetchTalents()
+      if (data && data.talents) {
         return data.talents.some(t => t.name.toLowerCase() === talentName.toLowerCase())
       }
       return false
@@ -1793,6 +1782,9 @@ const Talent = () => {
         throw new Error('Failed to save talent')
       }
 
+      // Invalidate cache
+      invalidateCache('talents')
+      
       // Mark talent as saved in the current list
       setTalents(prev => prev.map(t => 
         t.name === talent.name ? { ...t, isSaved: true } : t

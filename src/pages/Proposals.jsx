@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { ArrowLeft, Save, Send, Clock, DollarSign, Briefcase, Bot, Copy, Maximize2, Minimize2, Check, AlertCircle, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { logDebug, logError } from '../utils/logger'
+import { apiCache, getCached, invalidateCache } from '../utils/apiUtils'
 import ReactMarkdown from 'react-markdown'
 import BidModal from '../modals/BidModal'
 import ProposalGeneratorModal from '../modals/ProposalGeneratorModal'
@@ -128,32 +129,21 @@ const Proposals = () => {
     }
   }
 
-  // Load chat history when switching to assistant view
+  // PERFORMANCE: Load chat history using apiCache
   useEffect(() => {
-    const loadChatHistory = async () => {
+    const loadChatHistory = async (force = false) => {
       if (rightPanelView === 'assistant' && lead && lead.id) {
-        setIsLoadingHistory(true)
+        if (!chatMessages.length) setIsLoadingHistory(true)
+        
         try {
-          const token = localStorage.getItem('token')
-          const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+          if (force) invalidateCache(`chatHistory_${lead.id}`)
+          const data = await apiCache.fetchChatHistory(lead.id)
           
-          const response = await fetch(`${API_URL}/api/chat/history/${lead.id}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          })
-
-          if (response.ok) {
-            const data = await response.json()
-            if (data.messages && data.messages.length > 0) {
-              setChatMessages(data.messages)
-            } else {
-              setChatMessages([])
-            }
+          if (data && data.messages) {
+            setChatMessages(data.messages)
           }
         } catch (error) {
           logError('Error loading chat history', error)
-          setChatMessages([])
         } finally {
           setIsLoadingHistory(false)
         }
@@ -161,7 +151,8 @@ const Proposals = () => {
     }
 
     loadChatHistory()
-  }, [rightPanelView, lead])
+  }, [rightPanelView, lead?.id])
+
 
   // Auto-scroll to bottom only when new messages are added (not when switching views or loading history)
   useEffect(() => {
@@ -687,6 +678,9 @@ const Proposals = () => {
       }
 
       const data = await response.json()
+      
+      // Invalidate chat history cache so next load gets the full conversation
+      invalidateCache(`chatHistory_${lead.id}`)
       
       // Replace thinking message with actual AI response
       setChatMessages(prev => prev.map(msg => 

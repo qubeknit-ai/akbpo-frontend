@@ -31,7 +31,10 @@ const FreelancerSettings = () => {
       smart_bidding: true,
       min_skill_match: 1,
       proposal_type: 1,
-      commission_projects: true
+      commission_projects: true,
+      payment_verified: false,
+      min_hires: 0,
+      min_budget: 0
     }
   })
   const [isSavingSettings, setIsSavingSettings] = useState(false)
@@ -653,7 +656,35 @@ const FreelancerSettings = () => {
                 onChange={(e) => setAutoBidSettings({ ...autoBidSettings, max_project_bids: parseInt(e.target.value) })}
                 className="w-full px-3 py-2 bg-gray-50 dark:bg-[#2a2a2a] border border-gray-200 dark:border-gray-600 rounded-lg text-sm"
               />
-              <p className="text-xs text-gray-500 mt-1">Skip projects that already have more than this many bids</p>
+               <p className="text-xs text-gray-500 mt-1">Skip projects that already have more than this many bids</p>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                Minimum Client Hires
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={autoBidSettings.min_hires}
+                onChange={(e) => setAutoBidSettings({ ...autoBidSettings, min_hires: parseInt(e.target.value) || 0 })}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-[#2a2a2a] border border-gray-200 dark:border-gray-600 rounded-lg text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">Filter clients with at least this many previous hires (reviews)</p>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                Minimum Project Budget ($)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={autoBidSettings.min_budget}
+                onChange={(e) => setAutoBidSettings({ ...autoBidSettings, min_budget: parseFloat(e.target.value) || 0 })}
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-[#2a2a2a] border border-gray-200 dark:border-gray-600 rounded-lg text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">Only bid on projects with a minimum budget of this amount</p>
             </div>
 
           </div>
@@ -741,6 +772,22 @@ const FreelancerSettings = () => {
                 Include commission-based projects in auto-bidding
               </p>
             </div>
+
+            <div className="pt-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoBidSettings.payment_verified}
+                  onChange={(e) => setAutoBidSettings({ ...autoBidSettings, payment_verified: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Verified Payment Only</span>
+              </label>
+              <p className="text-xs text-gray-500 mt-1 ml-6">
+                Only bid on clients with a verified payment method
+              </p>
+            </div>
+
           </div>
 
         </div>

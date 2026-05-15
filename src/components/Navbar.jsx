@@ -3,9 +3,9 @@ import { useState, useRef, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import ConfirmModal from '../modals/ConfirmModal'
 import ProfileModal from '../modals/ProfileModal'
-import { logDebug, logError, logWarn } from '../utils/logger'
+import { logDebug, logError } from '../utils/logger'
 import { useFetchLimits } from '../hooks/useFetchLimits'
-import { debouncedApiCalls } from '../utils/apiUtils'
+import { apiCache, getCached, invalidateCache } from '../utils/apiUtils'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -19,11 +19,12 @@ const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
   const [isFetchingFreelancerPlus, setIsFetchingFreelancerPlus] = useState(false)
   const [isCleaning, setIsCleaning] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [showRefreshModal, setShowRefreshModal] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false)
 
   // Use the optimized fetch limits hook
   const { limits, updateLimits } = useFetchLimits()
-  
+
   // Extract limits for easier access
   const upworkRemaining = limits.upwork.remaining
   const freelancerRemaining = limits.freelancer.remaining
@@ -66,17 +67,17 @@ const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
     }
   })
 
-  // Freelancer profile data state
+  // Freelancer profile — load from localStorage immediately (no flicker)
   const [freelancerProfile, setFreelancerProfile] = useState(() => {
-    const cached = localStorage.getItem('freelancerProfileData')
-    if (cached) {
-      try {
-        return JSON.parse(cached)
-      } catch (e) {
-        return null
-      }
+    const cached = getCached('freelancerProfile')
+    if (cached) return cached
+    // Fallback: legacy key
+    try {
+      const raw = localStorage.getItem('freelancerProfileData')
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
     }
-    return null
   })
 
   const userEmail = userProfile.email
@@ -85,10 +86,10 @@ const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
   // Get freelancer avatar URL using the same logic as FreelancerSettings
   const getFreelancerAvatarUrl = () => {
     if (!freelancerProfile) return null
-    
+
     // Try CDN URLs first (they're more reliable), then fallback to relative paths
     let avatarUrl = null
-    
+
     if (freelancerProfile.avatar_large_cdn) {
       avatarUrl = `https:${freelancerProfile.avatar_large_cdn}`
     } else if (freelancerProfile.avatar_cdn) {
@@ -102,7 +103,7 @@ const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
     } else if (freelancerProfile.avatar_xlarge) {
       avatarUrl = `https://www.freelancer.com${freelancerProfile.avatar_xlarge}`
     }
-    
+
     return avatarUrl
   }
 
@@ -130,24 +131,18 @@ const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
 
   // Fetch limits are now handled by the useFetchLimits hook - no more excessive polling!
 
-  // Load freelancer profile data
-  const loadFreelancerProfile = async () => {
+  // Load freelancer profile data — uses persistent cache (5 min TTL)
+  const loadFreelancerProfile = async (force = false) => {
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/api/freelancer/profile`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
+      if (force) invalidateCache('freelancerProfile')
+      const data = await apiCache.fetchFreelancerProfile()
+      if (data) {
         setFreelancerProfile(data)
-        // Cache the freelancer profile data
+        // Keep legacy key in sync
         localStorage.setItem('freelancerProfileData', JSON.stringify(data))
+        localStorage.setItem('freelancerProfileTs', Date.now().toString())
       }
     } catch (error) {
-      // Silently fail - user might not have Freelancer connected
       logDebug('Freelancer profile not available', error)
     }
   }
@@ -156,22 +151,14 @@ const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
   useEffect(() => {
     const loadUserProfile = async () => {
       try {
-        const token = localStorage.getItem('token')
-        if (!token) return
-        
-        // Direct API call without debouncing for immediate profile load
-        const response = await fetch(`${API_URL}/api/profile`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-        
-        if (response.ok) {
-          const data = await response.json()
+        // Served from localStorage if < 10 min old — zero network on reload
+        const data = await apiCache.fetchProfile()
+        if (data) {
           setUserProfile({
             email: data.email || userProfile.email,
             name: data.name || '',
             role: data.role || 'user'
           })
-          // Cache the profile data
           sessionStorage.setItem('userProfileData', JSON.stringify(data))
         }
       } catch (error) {
@@ -181,35 +168,26 @@ const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
 
     const loadNotifications = async () => {
       try {
-        const data = await debouncedApiCalls.fetchNotifications()
-        if (data) {
-          setNotifications(data.notifications || [])
-        }
+        // Served from localStorage if < 2 min old
+        const data = await apiCache.fetchNotifications()
+        if (data) setNotifications(data.notifications || [])
       } catch (error) {
         logError('Failed to load notifications', error)
       }
     }
 
-    // Always load user profile on mount
     loadUserProfile()
+
+    // Freelancer profile: served from persistent cache (5 min TTL)
     loadFreelancerProfile()
 
-    // Only load notifications if user is authenticated
     const token = localStorage.getItem('token')
-    if (token) {
-      loadNotifications()
+    if (token) loadNotifications()
 
-      // REMOVED: Notification polling - now only loads on mount and user actions
-      // This prevents excessive API calls
-    }
-
-    // Listen for freelancer profile updates
-    const handleFreelancerProfileUpdate = () => {
-      loadFreelancerProfile()
-    }
-
-    // Listen for profile updates from Settings page
+    // Listen for forced refreshes
+    const handleFreelancerProfileUpdate = () => loadFreelancerProfile(true)
     const handleProfileUpdate = () => {
+      invalidateCache('profile')
       loadUserProfile()
     }
 
@@ -221,6 +199,7 @@ const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
       window.removeEventListener('userProfileUpdated', handleProfileUpdate)
     }
   }, [])
+
 
   // REMOVED: Excessive polling - fetch limits only updated when user performs actions
   // This was causing hundreds of unnecessary API calls
@@ -309,20 +288,40 @@ const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
     }
   }
 
-  const handleSync = async () => {
-    setIsSyncing(true)
+  const handleSync = () => {
+    setShowRefreshModal(true)
+  }
 
+  const handleConfirmRefresh = () => {
+    setIsSyncing(true)
+    setShowRefreshModal(false)
     try {
-      // Show loading message
-      toast.loading('Refreshing page...')
-      
-      // Reload the entire page
-      window.location.reload()
-      
+      // Save essential items
+      const token = localStorage.getItem('token')
+      const email = localStorage.getItem('userEmail')
+      const theme = localStorage.getItem('theme')
+      const sidebarOpen = localStorage.getItem('sidebarOpen')
+
+      // Show loading
+      toast.loading('Performing clean refresh...', { duration: 2000 })
+
+      // Clear all storage
+      localStorage.clear()
+      sessionStorage.clear()
+
+      // Restore essentials
+      if (token) localStorage.setItem('token', token)
+      if (email) localStorage.setItem('userEmail', email)
+      if (theme) localStorage.setItem('theme', theme)
+      if (sidebarOpen) localStorage.setItem('sidebarOpen', sidebarOpen)
+
+      // Small delay for UI feedback before reload
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
     } catch (error) {
-      logError('Refresh failed', error)
-      toast.error('Failed to refresh page')
-      setIsSyncing(false)
+      logError('Clean refresh failed', error)
+      window.location.reload()
     }
   }
 
@@ -723,8 +722,8 @@ const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
             >
               {freelancerAvatarUrl ? (
                 <div className="relative w-full h-full">
-                  <img 
-                    src={freelancerAvatarUrl} 
+                  <img
+                    src={freelancerAvatarUrl}
                     alt={`${displayName}'s profile`}
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -732,7 +731,7 @@ const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
                       e.target.nextSibling.style.display = 'flex'
                     }}
                   />
-                  <div 
+                  <div
                     className="w-full h-full bg-gradient-to-br from-purple-600 to-purple-700 flex items-center justify-center text-white font-semibold absolute top-0 left-0"
                     style={{ display: 'none' }}
                   >
@@ -821,6 +820,17 @@ const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
         confirmText="Hide My Leads"
         cancelText="Cancel"
         isDangerous={true}
+      />
+
+      <ConfirmModal
+        isOpen={showRefreshModal}
+        onClose={() => setShowRefreshModal(false)}
+        onConfirm={handleConfirmRefresh}
+        title="Clean Refresh"
+        message="A clean refresh will clear all temporary caches and reload the application. This helps if you're seeing outdated data or experiencing UI issues. Continue?"
+        confirmText="Refresh Now"
+        cancelText="Cancel"
+        confirmClassName="border border-white"
       />
 
       <ProfileModal

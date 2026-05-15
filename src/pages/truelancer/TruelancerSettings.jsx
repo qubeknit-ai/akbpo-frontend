@@ -16,14 +16,13 @@ const TruelancerSettings = () => {
     try {
       const cached = localStorage.getItem('truelancerAutoBidSettings')
       if (cached) return JSON.parse(cached)
-    } catch {}
+    } catch { }
     return {
-      enabled: false,
+      enabled: true,
       daily_bids: 10,
       frequency_minutes: 15,
-      min_skill_match: 1,
-      max_competition: 50,
       smart_bidding: true,
+      skill_matching: true,
       proposal_type: 1,
     }
   })
@@ -31,20 +30,15 @@ const TruelancerSettings = () => {
   const [autoBidStatus, setAutoBidStatus] = useState(() => {
     try {
       return localStorage.getItem('truelancerAutoBidStatus') || 'unknown'
-    } catch {}
+    } catch { }
     return 'unknown'
   })
-
-  const [selectedSkills, setSelectedSkills] = useState([])
-  const [availableSkills, setAvailableSkills] = useState([])
-  const [isLoadingSkills, setIsLoadingSkills] = useState(false)
-  const [isSavingSkills, setIsSavingSkills] = useState(false)
 
   useEffect(() => {
     const init = async () => {
       loadCachedData()
       setIsPageLoaded(true)
-      await Promise.all([checkConnection(), loadAutoBidSettings(), loadSkills()])
+      await Promise.all([checkConnection(), loadAutoBidSettings()])
     }
     init()
   }, [])
@@ -53,7 +47,7 @@ const TruelancerSettings = () => {
     try {
       const cached = localStorage.getItem('truelancerCredentials')
       if (cached) setCredentials(JSON.parse(cached))
-    } catch {}
+    } catch { }
   }
 
   const saveToCache = (data) => {
@@ -61,7 +55,7 @@ const TruelancerSettings = () => {
       if (data.credentials !== undefined) localStorage.setItem('truelancerCredentials', JSON.stringify(data.credentials))
       if (data.autoBidSettings !== undefined) localStorage.setItem('truelancerAutoBidSettings', JSON.stringify(data.autoBidSettings))
       if (data.autoBidStatus !== undefined) localStorage.setItem('truelancerAutoBidStatus', data.autoBidStatus)
-    } catch {}
+    } catch { }
   }
 
   const checkConnection = async () => {
@@ -98,7 +92,7 @@ const TruelancerSettings = () => {
         setAutoBidStatus(status)
         saveToCache({ autoBidSettings: data, autoBidStatus: status })
       }
-    } catch {}
+    } catch { }
   }
 
   const saveAutoBidSettings = async () => {
@@ -113,6 +107,7 @@ const TruelancerSettings = () => {
       if (response.ok) {
         toast.success('Truelancer settings saved')
         saveToCache({ autoBidSettings: autoBidSettings })
+        setAutoBidStatus(autoBidSettings.enabled ? 'running' : 'stopped')
       } else {
         throw new Error('Failed')
       }
@@ -121,88 +116,6 @@ const TruelancerSettings = () => {
     } finally {
       setIsSavingSettings(false)
     }
-  }
-
-  const toggleAutoBidder = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      const action = autoBidStatus === 'running' ? 'stop' : 'start'
-
-      if (action === 'start') {
-        const settingsRes = await fetch(`${API_URL}/api/truelancer/settings`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...autoBidSettings, enabled: true })
-        })
-        if (!settingsRes.ok) throw new Error('Failed to save settings before starting')
-      }
-
-      const response = await fetch(`${API_URL}/api/truelancer/autobid/${action}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-
-      if (response.ok) {
-        const newStatus = action === 'start' ? 'running' : 'stopped'
-        const newSettings = { ...autoBidSettings, enabled: action === 'start' }
-        setAutoBidStatus(newStatus)
-        setAutoBidSettings(newSettings)
-        saveToCache({ autoBidStatus: newStatus, autoBidSettings: newSettings })
-        toast.success(`Auto-bidder ${action === 'start' ? 'started' : 'stopped'} successfully`)
-        await loadAutoBidSettings()
-      } else {
-        throw new Error('Failed to toggle')
-      }
-    } catch (error) {
-      toast.error(`Failed to toggle auto-bidder: ${error.message}`)
-    }
-  }
-
-  const loadSkills = async () => {
-    setIsLoadingSkills(true)
-    try {
-      const token = localStorage.getItem('token')
-      const [selectedRes, availableRes] = await Promise.all([
-        fetch(`${API_URL}/api/truelancer/skills`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`${API_URL}/api/truelancer/available-skills`, { headers: { 'Authorization': `Bearer ${token}` } })
-      ])
-      if (selectedRes.ok) {
-        const data = await selectedRes.json()
-        setSelectedSkills(data.selected_skills || [])
-      }
-      if (availableRes.ok) {
-        const data = await availableRes.json()
-        setAvailableSkills(data.available_skills || [])
-      }
-    } catch {}
-    finally { setIsLoadingSkills(false) }
-  }
-
-  const saveSkills = async () => {
-    setIsSavingSkills(true)
-    try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/api/truelancer/skills`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ selected_skills: selectedSkills })
-      })
-      if (response.ok) {
-        toast.success('Skills saved successfully')
-      } else {
-        throw new Error('Failed')
-      }
-    } catch {
-      toast.error('Failed to save skills')
-    } finally {
-      setIsSavingSkills(false)
-    }
-  }
-
-  const toggleSkill = (skill) => {
-    setSelectedSkills(prev =>
-      prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill]
-    )
   }
 
   const disconnectTruelancer = async () => {
@@ -281,9 +194,9 @@ const TruelancerSettings = () => {
             <div className="flex items-center justify-between mb-4">
               <h4 className="font-medium text-gray-900 dark:text-gray-100">Connection Details</h4>
               {credentials.picture_url || credentials.truelancer_picture_url ? (
-                <img 
-                  src={credentials.picture_url || credentials.truelancer_picture_url} 
-                  alt="Profile" 
+                <img
+                  src={credentials.picture_url || credentials.truelancer_picture_url}
+                  alt="Profile"
                   className="w-12 h-12 rounded-full object-cover border-2 border-green-500"
                   onError={(e) => {
                     e.target.onerror = null;
@@ -355,17 +268,6 @@ const TruelancerSettings = () => {
               </p>
             </div>
           </div>
-          <button
-            onClick={toggleAutoBidder}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-white ${
-              autoBidStatus === 'running' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
-            }`}
-          >
-            {autoBidStatus === 'running'
-              ? <><Square className="w-4 h-4" /> Stop</>
-              : <><Play className="w-4 h-4" /> Start</>
-            }
-          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -392,31 +294,12 @@ const TruelancerSettings = () => {
                 <option value={1}>Proposal 1</option>
                 <option value={2}>Proposal 2</option>
                 <option value={3}>Proposal 3</option>
+                <option value={4}>Proposal 4</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">Select which proposal template to use for auto-bidding</p>
             </div>
 
-            <div>
-              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Min Skill Match</label>
-              <input
-                type="number" min="1" max="10"
-                value={autoBidSettings.min_skill_match}
-                onChange={(e) => setAutoBidSettings({ ...autoBidSettings, min_skill_match: parseInt(e.target.value) || 1 })}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-[#2a2a2a] border border-gray-200 dark:border-gray-600 rounded-lg text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">Minimum number of your skills that must match project requirements</p>
-            </div>
 
-            <div>
-              <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Max Competition (Existing Proposals)</label>
-              <input
-                type="number"
-                value={autoBidSettings.max_competition}
-                onChange={(e) => setAutoBidSettings({ ...autoBidSettings, max_competition: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-[#2a2a2a] border border-gray-200 dark:border-gray-600 rounded-lg text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">Skip jobs that already have more than this many proposals</p>
-            </div>
           </div>
 
           {/* Right column */}
@@ -437,7 +320,8 @@ const TruelancerSettings = () => {
               <p className="text-xs text-gray-500 mt-1">How often to check for new projects (5-60 mins)</p>
             </div>
 
-            <div className="pt-4">
+            <div className="pt-4 space-y-4">
+
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -448,6 +332,19 @@ const TruelancerSettings = () => {
                 <span className="text-sm text-gray-700 dark:text-gray-300">Enable Smart Bidding (Avg Price)</span>
               </label>
               <p className="text-xs text-gray-500 mt-1 ml-6">Automatically bids the average of Min/Max budget</p>
+            </div>
+
+            <div className="pt-2 space-y-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoBidSettings.skill_matching}
+                  onChange={(e) => setAutoBidSettings({ ...autoBidSettings, skill_matching: e.target.checked })}
+                  className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Enable Skill Matching</span>
+              </label>
+              <p className="text-xs text-gray-500 mt-1 ml-6">Only bid on projects that match your profile skills</p>
             </div>
           </div>
         </div>
@@ -465,87 +362,6 @@ const TruelancerSettings = () => {
         </div>
       </div>
 
-      {/* My Skills */}
-      <div className="bg-white dark:bg-[#1f1f1f] rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-100 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400">
-              <User className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100">My Skills</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Select skills to filter Truelancer projects that match your expertise
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {isLoadingSkills ? (
-          <div className="text-center py-8">
-            <img src={gif} alt="Loading" className="h-12 object-contain mx-auto mb-4" />
-            <p className="text-gray-600 dark:text-gray-400">Loading skills...</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Selected: {selectedSkills.length} skill{selectedSkills.length !== 1 ? 's' : ''}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSelectedSkills([...availableSkills])}
-                  disabled={selectedSkills.length === availableSkills.length || availableSkills.length === 0}
-                  className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
-                >
-                  Select All
-                </button>
-                <button
-                  onClick={() => setSelectedSkills([])}
-                  disabled={selectedSkills.length === 0}
-                  className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-                >
-                  Deselect All
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-96 overflow-y-auto">
-              {availableSkills.map((skill) => (
-                <label
-                  key={skill}
-                  className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedSkills.includes(skill)}
-                    onChange={() => toggleSkill(skill)}
-                    className="w-4 h-4 text-green-600 rounded focus:ring-green-500 focus:ring-2"
-                  />
-                  <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{skill}</span>
-                </label>
-              ))}
-            </div>
-
-            {availableSkills.length === 0 && (
-              <div className="text-center py-8">
-                <p className="text-gray-600 dark:text-gray-400">No skills available. Loading...</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={saveSkills}
-            disabled={isSavingSkills || isLoadingSkills}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-70"
-          >
-            <Save className="w-4 h-4" />
-            {isSavingSkills ? 'Saving...' : 'Save Skills'}
-          </button>
-        </div>
-      </div>
 
     </div>
   )

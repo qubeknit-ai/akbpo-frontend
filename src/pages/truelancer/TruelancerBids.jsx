@@ -7,12 +7,12 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const PACKAGE_NAMES = { 1: 'Free', 3: 'Basic', 4: 'Pro', 5: 'Plus' }
 
 const STATUS_COLORS = {
-  submitted:  'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  accepted:   'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  rejected:   'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-  pending:    'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
-  hired:      'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
-  withdrawn:  'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  submitted: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  accepted: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  pending: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+  hired: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+  withdrawn: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 }
 
 const TruelancerBids = () => {
@@ -43,10 +43,10 @@ const TruelancerBids = () => {
   const loadBids = async () => {
     try {
       const token = localStorage.getItem('token')
-      const params = new URLSearchParams({ 
-        page: currentPage, 
+      const params = new URLSearchParams({
+        page: currentPage,
         per_page: PER_PAGE,
-        live: 'true' 
+        live: 'true'
       })
       if (filterStatus !== 'all') params.set('status', filterStatus)
 
@@ -59,17 +59,17 @@ const TruelancerBids = () => {
         setBids(bidsList)
         if (data.total) {
           setTotalPages(Math.ceil(data.total / PER_PAGE))
-          
+
           // Calculate Avg Rank from current page bids
           const ranks = bidsList
             .map(b => parseInt(b.total_proposals))
             .filter(r => !isNaN(r))
-          
-          const avgRank = ranks.length > 0 
+
+          const avgRank = ranks.length > 0
             ? (ranks.reduce((a, b) => a + b, 0) / ranks.length).toFixed(1)
             : '0'
 
-          const activeCount = bidsList.filter(b => 
+          const activeCount = bidsList.filter(b =>
             b.status && b.status.toLowerCase().includes('active')
           ).length
 
@@ -82,7 +82,7 @@ const TruelancerBids = () => {
           }))
         }
       }
-    } catch {}
+    } catch { }
   }
 
   const loadStats = async () => {
@@ -95,7 +95,7 @@ const TruelancerBids = () => {
         const data = await response.json()
         setStats(data)
       }
-    } catch {}
+    } catch { }
   }
 
   const handleRefresh = async () => {
@@ -127,7 +127,7 @@ const TruelancerBids = () => {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <img src={gif} alt="Loading" className="h-16 object-contain" />
+        <img src={gif} alt="Loading" className="h-12 object-contain" />
         <p className="text-gray-600 dark:text-gray-400">Loading bid history...</p>
       </div>
     )

@@ -2,32 +2,15 @@ import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import { Users, Database, Zap, Clock, RefreshCw } from 'lucide-react'
 import { logError } from '../utils/logger'
+import { apiCache, getCached, invalidateCache } from '../utils/apiUtils'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const AdminDashboard = () => {
+  // PERFORMANCE: Load from persistent cache immediately
   const [stats, setStats] = useState(() => {
-    // Load from cache immediately
-    const cached = sessionStorage.getItem('adminStats')
-    if (cached) {
-      try {
-        return JSON.parse(cached)
-      } catch (e) {
-        return {
-          totalUsers: 0,
-          totalLeads: 0,
-          autoBidEnabled: 0,
-          autoBidDisabled: 0,
-          avgBidFrequency: 0,
-          platformBreakdown: [],
-          totalRevenue: 0,
-          proposalsSent: 0,
-          proposalsAccepted: 0,
-          successRate: 0
-        }
-      }
-    }
-    return {
+    const cached = getCached('adminStats')
+    return cached || {
       totalUsers: 0,
       totalLeads: 0,
       autoBidEnabled: 0,
@@ -40,11 +23,15 @@ const AdminDashboard = () => {
       successRate: 0
     }
   })
-  const [loading, setLoading] = useState(true)
+  
+  const [loading, setLoading] = useState(!stats.totalUsers)
   const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState(() => {
-    const cached = sessionStorage.getItem('adminStatsTimestamp')
-    return cached ? new Date(parseInt(cached)) : null
+    try {
+      const raw = localStorage.getItem('apicache__adminStats')
+      if (raw) return new Date(JSON.parse(raw).timestamp)
+    } catch (e) {}
+    return null
   })
 
   useEffect(() => {
@@ -58,49 +45,26 @@ const AdminDashboard = () => {
     return () => clearInterval(interval)
   }, [])
 
-  const loadStats = async (isBackgroundSync = false) => {
+  const loadStats = async (force = false) => {
     try {
-      if (!isBackgroundSync) {
-        setLoading(true)
-      } else {
-        setSyncing(true)
-      }
+      if (force) invalidateCache('adminStats')
       
-      const token = localStorage.getItem('token')
+      setSyncing(true)
+      const data = await apiCache.fetchAdminStats()
       
-      // Check cache age (use cache if less than 2 minutes old and not forced refresh)
-      const cacheTimestamp = sessionStorage.getItem('adminStatsTimestamp')
-      const cacheAge = cacheTimestamp ? Date.now() - parseInt(cacheTimestamp) : Infinity
-      
-      if (cacheAge < 120000 && stats.totalUsers > 0 && !isBackgroundSync) {
-        // Use cached data if less than 2 minutes old
-        setLoading(false)
-        return
-      }
-      
-      const response = await fetch(`${API_URL}/api/admin/stats`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
+      if (data) {
         setStats(data)
-        const now = Date.now()
-        // Cache the data
-        sessionStorage.setItem('adminStats', JSON.stringify(data))
-        sessionStorage.setItem('adminStatsTimestamp', now.toString())
-        setLastSync(new Date(now))
+        setLastSync(new Date())
       }
     } catch (error) {
       logError('Failed to load admin stats', error)
-      if (!isBackgroundSync) {
-        toast.error('Load On server Plz try again Later')
-      }
+      toast.error('Failed to sync stats')
     } finally {
       setLoading(false)
       setSyncing(false)
     }
   }
+
 
   if (loading) {
     return (

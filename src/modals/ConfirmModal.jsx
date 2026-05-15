@@ -1,6 +1,6 @@
 import { X, AlertTriangle } from 'lucide-react'
 
-const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmText = 'Confirm', cancelText = 'Cancel', isDangerous = false }) => {
+const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmText = 'Confirm', cancelText = 'Cancel', isDangerous = false, confirmClassName = "" }) => {
   if (!isOpen) return null
 
   return (
@@ -49,7 +49,7 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmText 
                 isDangerous
                   ? 'bg-red-600 text-white hover:bg-red-700'
                   : 'bg-gray-900 dark:bg-[#212121] text-white hover:bg-gray-800 dark:hover:bg-gray-600'
-              }`}
+              } ${confirmClassName}`}
             >
               {confirmText}
             </button>

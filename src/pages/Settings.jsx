@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Save, Loader2, RefreshCw, User, Bot, HelpCircle, X } from 'lucide-react'
 import { Toaster } from 'react-hot-toast'
 import { showSingleToast } from '../utils/toastUtils'
+import { apiCache, invalidateCache } from '../utils/apiUtils'
 import { logError } from '../utils/logger'
 import gif from '../assets/gif.gif'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -187,15 +188,9 @@ const Settings = () => {
 
   const fetchProfile = async () => {
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/api/profile`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+      const data = await apiCache.fetchProfile()
 
-      if (response.ok) {
-        const data = await response.json()
+      if (data) {
         const profileData = {
           name: data.name || '',
           email: data.email || '',
@@ -203,26 +198,19 @@ const Settings = () => {
           country: data.country || ''
         }
         setUserProfile(profileData)
-        // Cache the profile data
+        // Cache for immediate sub-second access
         sessionStorage.setItem('userProfileData', JSON.stringify(data))
       }
     } catch (error) {
       logError('Failed to fetch profile', error)
-      showSingleToast.error('Load On server Plz try again Later')
     }
   }
 
   const fetchSettings = async () => {
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/api/settings`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+      const data = await apiCache.fetchSettings()
 
-      if (response.ok) {
-        const data = await response.json()
+      if (data) {
         sessionStorage.setItem('settingsData', JSON.stringify(data))
         
         setUpworkSettings({
@@ -244,7 +232,6 @@ const Settings = () => {
       }
     } catch (error) {
       logError('Failed to fetch settings', error)
-      showSingleToast.error('Load On server Plz try again Later')
     } finally {
       setLoading(false)
     }
@@ -300,6 +287,7 @@ const Settings = () => {
 
         // Update profile cache
         const profileData = await profileResponse.json()
+        invalidateCache('profile')
         sessionStorage.setItem('userProfileData', JSON.stringify(profileData))
         
         // Notify other components that profile was updated
@@ -308,6 +296,7 @@ const Settings = () => {
 
       if (settingsResponse.ok) {
         const data = await settingsResponse.json()
+        invalidateCache('settings')
         sessionStorage.setItem('settingsData', JSON.stringify(data))
         showSingleToast.success('Settings saved successfully!')
       } else {

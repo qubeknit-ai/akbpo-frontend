@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { ExternalLink, DollarSign, Clock, Users, RefreshCw, AlertCircle, RotateCcw, User, Search, ChevronDown, ChevronUp, Star, Shield, CreditCard, Mail, Phone, UserCheck, CheckCircle } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { ExternalLink, DollarSign, Clock, Users, RefreshCw, AlertCircle, RotateCcw, User, Search, ChevronDown, ChevronUp, Star, Shield, CreditCard, Mail, Phone, UserCheck, CheckCircle, Briefcase } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { logError } from '../../utils/logger'
 import freelancerSync from '../../utils/freelancerSync'
@@ -35,10 +35,15 @@ const FreelancerProjects = () => {
   const [processingProposals, setProcessingProposals] = useState(new Set())
   const [expandedDescriptions, setExpandedDescriptions] = useState(new Set())
   const [fullDescriptions, setFullDescriptions] = useState({})
+  const [enrichedClients, setEnrichedClients] = useState({})
   const [loadingDescriptions, setLoadingDescriptions] = useState(false)
   const [showBidModal, setShowBidModal] = useState(false)
   const [selectedProject, setSelectedProject] = useState(null)
   const [suggestedBidAmount, setSuggestedBidAmount] = useState(0)
+  const [fetchingDetails, setFetchingDetails] = useState(new Set())
+  const [projectOwnerMap, setProjectOwnerMap] = useState({})
+  const abortControllerRef = useRef(null)
+  const isMountedRef = useRef(true)
 
   // Save max bids to cookies whenever it changes
   const handleMaxBidsChange = (value) => {
@@ -124,67 +129,129 @@ const FreelancerProjects = () => {
   }
 
   // Fetch full descriptions for projects
-  const fetchFullDescriptions = async (projects) => {
+  const fetchFullDescriptions = async (projectsToFetch) => {
+    if (projectsToFetch.length === 0) return
+    
     setLoadingDescriptions(true)
     const token = localStorage.getItem('token')
-    const descriptions = {}
     
-    console.log('🔍 Fetching full descriptions for', projects.length, 'projects...')
+    // Add projects to fetching set
+    setFetchingDetails(prev => {
+      const newSet = new Set(prev)
+      projectsToFetch.forEach(p => newSet.add(p.id.toString()))
+      return newSet
+    })
+    
+    console.log('🔍 Fetching full descriptions for', projectsToFetch.length, 'projects...')
     
     try {
-      // Fetch descriptions in batches to avoid overwhelming the API
-      const batchSize = 5
-      for (let i = 0; i < projects.length; i += batchSize) {
-        const batch = projects.slice(i, i + batchSize)
+      // Fetch descriptions in batches
+      const batchSize = 3
+      for (let i = 0; i < projectsToFetch.length; i += batchSize) {
+        // Check if component is still mounted and not aborted
+        if (!isMountedRef.current) break
         
-        const promises = batch.map(async (project) => {
+        const batch = projectsToFetch.slice(i, i + batchSize)
+        
+        await Promise.all(batch.map(async (project) => {
           try {
+            // Check for abort signal
+            const signal = abortControllerRef.current?.signal
+            
             const response = await fetch(`${API_URL}/api/freelancer/project/${project.id}`, {
               headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
-              }
+              },
+              signal
             })
             
             if (response.ok) {
               const projectDetails = await response.json()
               const fullDescription = projectDetails.description || projectDetails.preview_description || project.preview_description || project.description || 'NO_DESCRIPTION_AVAILABLE'
-              descriptions[project.id] = fullDescription
-              console.log(`✅ Fetched full description for project ${project.id}: ${fullDescription.length} characters`)
-            } else {
-              console.log(`⚠️ Could not fetch full description for project ${project.id}, using preview`)
-              descriptions[project.id] = project.preview_description || project.description || 'NO_DESCRIPTION_AVAILABLE'
+              
+              if (isMountedRef.current) {
+                setFullDescriptions(prev => ({ ...prev, [project.id]: fullDescription }))
+                if (projectDetails.owner) {
+                  const ownerId = projectDetails.owner_id || projectDetails.owner.id
+                  
+                  // Map the project to its true owner ID since the initial fetch might omit it
+                  if (ownerId) {
+                    setProjectOwnerMap(prev => ({ ...prev, [project.id.toString()]: ownerId }))
+                  }
+                  
+                  setEnrichedClients(prev => {
+                    const clientKey = ownerId || `project_${project.id}`
+                    const existingClient = prev[clientKey] || project.client || {}
+                    const newOwner = projectDetails.owner
+                    
+                    const mergedClient = {
+                        ...existingClient,
+                        ...newOwner,
+                        // Safely preserve or merge nested objects
+                        status: newOwner.status?.payment_verified !== undefined 
+                          ? newOwner.status 
+                          : (existingClient.status || newOwner.status),
+                        reputation: newOwner.reputation?.entire_site 
+                          ? newOwner.reputation 
+                          : (existingClient.reputation || newOwner.reputation),
+                        verification: newOwner.verification?.payment_verified !== undefined 
+                          ? newOwner.verification 
+                          : (existingClient.verification || newOwner.verification),
+                        location: newOwner.location?.country 
+                          ? newOwner.location 
+                          : (existingClient.location || newOwner.location),
+                        country: newOwner.country?.name 
+                          ? newOwner.country 
+                          : (existingClient.country || newOwner.country)
+                    }
+                    
+                    return {
+                      ...prev,
+                      [clientKey]: mergedClient
+                    }
+                  })
+                }
+                console.log(`✅ Fetched full description and client details for project ${project.id}`)
+              }
             }
           } catch (error) {
-            console.log(`❌ Error fetching description for project ${project.id}:`, error.message)
-            descriptions[project.id] = project.preview_description || project.description || 'NO_DESCRIPTION_AVAILABLE'
+            if (error.name === 'AbortError') {
+              console.log(`⏹️ Aborted fetching description for project ${project.id}`)
+            } else {
+              console.log(`❌ Error fetching description for project ${project.id}:`, error.message)
+            }
+          } finally {
+            if (isMountedRef.current) {
+              setFetchingDetails(prev => {
+                const newSet = new Set(prev)
+                newSet.delete(project.id.toString())
+                return newSet
+              })
+            }
           }
-        })
+        }))
         
-        await Promise.all(promises)
-        
-        // Update descriptions incrementally so user sees progress
-        setFullDescriptions(prev => ({ ...prev, ...descriptions }))
-        
-        // Small delay between batches to be respectful to the API
-        if (i + batchSize < projects.length) {
-          await new Promise(resolve => setTimeout(resolve, 200))
+        // Small delay between batches
+        if (i + batchSize < projectsToFetch.length && isMountedRef.current) {
+          await new Promise(resolve => setTimeout(resolve, 100))
         }
       }
-      
-      console.log('✅ Finished fetching full descriptions for all projects')
     } finally {
-      setLoadingDescriptions(false)
+      if (isMountedRef.current) {
+        setLoadingDescriptions(false)
+      }
     }
   }
 
   useEffect(() => {
-    console.log('🚀 FreelancerProjects mounted, checking stored credentials...')
+    console.log('🚀 FreelancerProjects mounted')
+    isMountedRef.current = true
+    abortControllerRef.current = new AbortController()
     
     // Load generated proposals from cookies
     const savedProposals = getGeneratedProposalsCookie()
     setGeneratedProposals(savedProposals)
-    console.log('📋 Loaded generated proposals from cookies:', [...savedProposals])
     
     const initialize = async () => {
       checkConnection()
@@ -194,6 +261,14 @@ const FreelancerProjects = () => {
     }
     
     initialize()
+    
+    return () => {
+      console.log('👋 FreelancerProjects unmounting, aborting background tasks')
+      isMountedRef.current = false
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -304,19 +379,6 @@ const FreelancerProjects = () => {
       const enrichedProjects = projects.map(project => {
         const client = project.owner_id ? users[project.owner_id] : null
         
-        // Debug: Log first project to understand API structure
-        if (projects.indexOf(project) === 0) {
-          console.log('🔍 First project structure:', JSON.stringify(project, null, 2))
-          console.log('🔍 First project budget specifically:', JSON.stringify(project.budget, null, 2))
-          console.log('🔍 All project keys:', Object.keys(project))
-          console.log('🔍 Looking for currency fields:', {
-            currency: project.currency,
-            currency_id: project.currency_id,
-            budget_currency: project.budget?.currency,
-            budget_currency_id: project.budget?.currency_id
-          })
-        }
-        
         return {
           ...project,
           client: client
@@ -324,18 +386,19 @@ const FreelancerProjects = () => {
       })
       
       setProjects(enrichedProjects)
+      setIsLoading(false) // SHOW PROJECTS IMMEDIATELY
       
       // Fetch full descriptions for projects that don't have them cached
       const projectsNeedingDescriptions = enrichedProjects.filter(project => !fullDescriptions[project.id])
       if (projectsNeedingDescriptions.length > 0) {
-        await fetchFullDescriptions(projectsNeedingDescriptions)
+        // Don't await this, let it run in background
+        fetchFullDescriptions(projectsNeedingDescriptions)
       }
       
       setLastLoadTime(Date.now())
     } catch (error) {
       logError('Failed to load projects', error)
       toast.error('Failed to load projects: ' + error.message)
-    } finally {
       setIsLoading(false)
     }
   }
@@ -830,16 +893,7 @@ const FreelancerProjects = () => {
   const formatBudget = (budget, project = null) => {
     if (!budget) return 'Not specified'
     
-    // Debug: Log the budget structure to understand the API response
-    console.log('💰 Budget structure:', JSON.stringify(budget, null, 2))
-    if (project) {
-      console.log('🔍 Full project for currency detection:', JSON.stringify({
-        currency: project.currency,
-        currency_id: project.currency_id,
-        location: project.location,
-        owner: project.owner
-      }, null, 2))
-    }
+
     
     const minBudget = budget.minimum || 0
     const maxBudget = budget.maximum || minBudget
@@ -939,12 +993,9 @@ const FreelancerProjects = () => {
         'EG': 'EGP'
       }
       if (clientCountry && countryCurrencyMap[clientCountry]) {
-        console.log('🌍 Detected currency from client country:', clientCountry, '->', countryCurrencyMap[clientCountry])
         currency = countryCurrencyMap[clientCountry]
       }
     }
-    
-    console.log('💱 Final detected currency:', currency)
     
     // Get currency symbol
     const getCurrencySymbol = (currencyCode) => {
@@ -1017,13 +1068,7 @@ const FreelancerProjects = () => {
   }
 
   const getProjectType = (project) => {
-    // Debug: Log the project structure to understand the API response
-    console.log('🔍 Project type debug:', {
-      type: project.type,
-      project_type: project.project_type,
-      budget_type: project.budget?.type,
-      budget: project.budget
-    })
+
     
     // Check for project type in various possible fields
     const type = project.type || project.project_type || project.budget?.type || project.type_id
@@ -1052,156 +1097,56 @@ const FreelancerProjects = () => {
   }
 
   const getClientInfo = (project) => {
-    const client = project.client
+    // Look up ownerId from project OR the map (in case API hid it initially)
+    const resolvedOwnerId = project.owner_id || projectOwnerMap[project.id.toString()]
+    const ownerId = resolvedOwnerId ? resolvedOwnerId.toString() : null
+    
+    // Fall back to looking up by project ID if owner ID is missing entirely
+    const client = (ownerId && enrichedClients[ownerId]) || enrichedClients[`project_${project.id}`] || project.client
     if (!client) return null
     
-    // Debug: Log client structure to understand available data (only for first few projects)
-    if (Math.random() < 0.1) { // Only log 10% of the time to avoid spam
-      console.log('🔍 Client data structure for project', project.id, ':', JSON.stringify(client, null, 2))
-    }
+
     
-    // Try to get country code from various possible locations
+    // Extract country code
     let countryCode = null
     if (client.location?.country?.code) {
       countryCode = client.location.country.code.toUpperCase()
     } else if (client.country?.code) {
       countryCode = client.country.code.toUpperCase()
-    } else if (client.location?.country?.name) {
-      // Map common country names to codes as fallback
-      const countryMap = {
-        'United States': 'US',
-        'United Kingdom': 'GB',
-        'Canada': 'CA',
-        'Australia': 'AU',
-        'Germany': 'DE',
-        'France': 'FR',
-        'India': 'IN',
-        'Pakistan': 'PK',
-        'Bangladesh': 'BD',
-        'Philippines': 'PH',
-        'Ukraine': 'UA',
-        'Poland': 'PL',
-        'Romania': 'RO',
-        'Serbia': 'RS',
-        'Brazil': 'BR',
-        'Argentina': 'AR',
-        'Mexico': 'MX',
-        'Egypt': 'EG',
-        'Nigeria': 'NG',
-        'South Africa': 'ZA',
-        'Kenya': 'KE',
-        'Morocco': 'MA',
-        'Tunisia': 'TN',
-        'Oman': 'OM',
-        'United Arab Emirates': 'AE',
-        'Italy': 'IT',
-        'Indonesia': 'ID',
-        'Qatar': 'QA',
-        'Netherlands': 'NL',
-        'Spain': 'ES',
-        'Saudi Arabia' : 'SA',
-        'Haiti':'HT'
-      }
-      countryCode = countryMap[client.location.country.name] || null
     }
     
-    // Extract reputation data from various possible locations
+    // Extract reputation data (reviews/hires)
     let reviewCount = 0
     let rating = 0
-    let completionRate = null
-    let onTimeRate = null
-    let onBudgetRate = null
     
-    // Try different paths for reputation data
     if (client.reputation) {
-      // Method 1: entire_site.overall structure
       if (client.reputation.entire_site?.overall) {
         reviewCount = client.reputation.entire_site.overall.count || 0
         rating = client.reputation.entire_site.overall.rating || 0
-        completionRate = client.reputation.entire_site.overall.completion_rate
-        onTimeRate = client.reputation.entire_site.overall.on_time_rate
-        onBudgetRate = client.reputation.entire_site.overall.on_budget_rate
-      }
-      // Method 2: Direct reputation properties
-      else if (client.reputation.count !== undefined) {
-        reviewCount = client.reputation.count || 0
-        rating = client.reputation.rating || client.reputation.average_rating || 0
-        completionRate = client.reputation.completion_rate
-        onTimeRate = client.reputation.on_time_rate
-        onBudgetRate = client.reputation.on_budget_rate
-      }
-      // Method 3: Check for other reputation structures
-      else {
-        console.log('🔍 Unknown reputation structure:', client.reputation)
-        // Try to extract any available data
-        reviewCount = client.reputation.review_count || client.reputation.total_reviews || 0
-        rating = client.reputation.overall_rating || client.reputation.avg_rating || 0
+      } else {
+        reviewCount = client.reputation.count || client.reputation.review_count || 0
+        rating = client.reputation.rating || client.reputation.avg_rating || 0
       }
     }
     
-    // Fallback: check direct properties on client
-    if (reviewCount === 0) {
-      reviewCount = client.review_count || client.total_reviews || client.reviews_count || 0
-    }
-    if (rating === 0) {
-      rating = client.rating || client.overall_rating || client.avg_rating || 0
-    }
-    
-    // Debug: Log extracted reputation data (only occasionally)
-    if (Math.random() < 0.1) {
-      console.log('📊 Extracted reputation data:', {
-        reviewCount,
-        rating,
-        completionRate,
-        onTimeRate,
-        onBudgetRate
-      })
-    }
-    
-    // Debug: Log verification status to understand what's available
-    if (Math.random() < 0.3) { // Increase logging to 30% to better understand the data
-      console.log('🔍 Client verification status for', client.display_name || client.username, ':', {
-        status: client.status,
-        verification: client.verification,
-        registration_completed: client.registration_completed,
-        limited_account: client.limited_account,
-        closed: client.closed,
-        primary_currency: client.primary_currency,
-        escrowcom_interaction_required: client.escrowcom_interaction_required,
-        // Check for direct verification fields
-        email_verified: client.email_verified,
-        phone_verified: client.phone_verified,
-        payment_verified: client.payment_verified,
-        identity_verified: client.identity_verified,
-        deposit_made: client.deposit_made,
-        // Check for membership/qualification details
-        membership_details: client.membership_details,
-        qualification_details: client.qualification_details
-      })
-    }
-    
+    // Check payment verification from multiple possible API fields
+    const isPaymentVerified = 
+      client.status?.payment_verified === true || 
+      client.status?.payment_method_verified === true || 
+      client.payment_verified === true || 
+      client.payment_method_verified === true || 
+      client.verification?.payment_verified === true ||
+      client.verification?.payment_method_verified === true
+      
     return {
       name: client.display_name || client.username || 'Unknown Client',
       country: client.location?.country?.name || client.country?.name || 'Unknown',
-      city: client.location?.city || null,
-      countryCode: countryCode,
-      reviewCount: reviewCount,
-      rating: rating,
-      completionRate: completionRate,
-      onTimeRate: onTimeRate,
-      onBudgetRate: onBudgetRate,
-      avatar: client.avatar_large_url || client.avatar_url,
-      memberSince: client.registration_date,
-      // Check verification status from multiple possible locations in the API response
-      isEmailVerified: client.status?.email_verified === true || client.email_verified === true,
-      isPhoneVerified: client.status?.phone_verified === true || client.status?.mobile_verified === true || client.phone_verified === true || client.mobile_verified === true,
-      isPaymentVerified: client.status?.payment_verified === true || client.status?.payment_method_verified === true || client.payment_verified === true || client.payment_method_verified === true || client.verification?.payment_verified === true,
-      isIdentityVerified: client.status?.identity_verified === true || client.status?.kyc_verified === true || client.identity_verified === true || client.kyc_verified === true || client.verification?.identity_verified === true,
-      isDepositMade: client.status?.deposit_made === true || client.status?.has_deposit === true || client.deposit_made === true || client.has_deposit === true || client.verification?.deposit_made === true,
-      isProfileCompleted: client.registration_completed === true || client.profile_completed === true,
-      // Additional checks for account status
-      isLimitedAccount: client.limited_account || false,
-      isAccountClosed: client.closed || false
+      countryCode,
+      reviewCount,
+      rating,
+      isPaymentVerified,
+      hasRichData: !!(client.reputation && (client.status || client.verification)),
+      avatar: client.avatar_large_url || client.avatar_url
     }
   }
 
@@ -1364,10 +1309,10 @@ const FreelancerProjects = () => {
                     })()}
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4 text-center md:text-left">
                     <div>
                       <p className="text-sm text-gray-600 dark:text-gray-400">Budget</p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 justify-center md:justify-start">
                         <DollarSign className="w-4 h-4 text-green-600" />
                         <span className="font-semibold text-gray-900 dark:text-gray-100">
                           {formatBudget(project.budget, project)}
@@ -1385,7 +1330,7 @@ const FreelancerProjects = () => {
                     
                     <div>
                       <p className="text-sm text-gray-600 dark:text-gray-400">Bids</p>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 justify-center md:justify-start">
                         <Users className="w-4 h-4 text-blue-600" />
                         <span className="font-semibold text-gray-900 dark:text-gray-100">
                           {project.bid_stats?.bid_count || 0}
@@ -1402,7 +1347,7 @@ const FreelancerProjects = () => {
                     
                     <div>
                       <p className="text-sm text-gray-600 dark:text-gray-400">Delivery Time</p>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 justify-center md:justify-start">
                         <Clock className="w-4 h-4 text-purple-600" />
                         <span className="font-semibold text-gray-900 dark:text-gray-100">
                           {project.time_free_bids_end ? 
@@ -1411,6 +1356,67 @@ const FreelancerProjects = () => {
                           }
                         </span>
                       </div>
+                    </div>
+
+                    {/* Client Payment Verification */}
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Payment</p>
+                      {(() => {
+                        const isFetching = fetchingDetails.has(project.id.toString())
+                        const clientInfo = getClientInfo(project)
+                        
+                        if (isFetching && (!clientInfo || !clientInfo.hasRichData)) {
+                          return (
+                            <div className="flex items-center gap-1 justify-center md:justify-start">
+                              <span className="text-gray-400 font-medium">-</span>
+                            </div>
+                          )
+                        }
+                        
+                        const isVerified = clientInfo?.isPaymentVerified
+                        return (
+                          <div className="flex items-center gap-1 justify-center md:justify-start">
+                            {isVerified ? (
+                              <>
+                                <CheckCircle className="w-4 h-4 text-blue-500" />
+                                <span className="font-semibold text-blue-600 dark:text-blue-400">Verified</span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle className="w-4 h-4 text-gray-400" />
+                                <span className="font-semibold text-gray-500 dark:text-gray-400">Unverified</span>
+                              </>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </div>
+
+                    {/* Client Hire History */}
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Client Hires</p>
+                      {(() => {
+                        const isFetching = fetchingDetails.has(project.id.toString())
+                        const clientInfo = getClientInfo(project)
+                        
+                        if (isFetching && (!clientInfo || !clientInfo.hasRichData)) {
+                          return (
+                            <div className="flex items-center gap-1 justify-center md:justify-start">
+                              <span className="text-gray-400 font-medium">-</span>
+                            </div>
+                          )
+                        }
+                        
+                        const hireCount = clientInfo?.reviewCount || 0
+                        return (
+                          <div className="flex items-center gap-1 justify-center md:justify-start">
+                            <Briefcase className="w-4 h-4 text-orange-500" />
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">
+                              {hireCount > 0 ? `${hireCount} Hires` : 'No Hires'}
+                            </span>
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
 
@@ -1453,210 +1459,60 @@ const FreelancerProjects = () => {
                     </div>
                     {(() => {
                       const isGenerated = isProposalGenerated(project.id)
-                      console.log(`🎯 Rendering project ${project.id} (${typeof project.id}): isGenerated=${isGenerated}`)
-                      return isGenerated ? (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleViewProposal(project)}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                          >
-                            View
-                          </button>
-                          <button
-                            onClick={() => handleBidOnProject(project)}
-                            disabled={isProposalProcessing(project.id)}
-                            className={`px-4 py-2 text-white rounded-lg transition-colors ${
-                              isProposalProcessing(project.id)
-                                ? 'bg-gray-400 cursor-not-allowed'
-                                : 'bg-blue-600 hover:bg-blue-700'
-                            }`}
-                          >
-                            {isProposalProcessing(project.id) ? 'Bid' : 'Bid'}
-                          </button>
-                        </div>
-                      ) : (
+                      const isProcessing = isProposalProcessing(project.id)
+                      const isFetching = fetchingDetails.has(project.id.toString())
+                      
+                      if (isGenerated) {
+                        return (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleViewProposal(project)}
+                              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                            >
+                              View
+                            </button>
+                            <button
+                              onClick={() => handleBidOnProject(project)}
+                              disabled={isProcessing}
+                              className={`px-4 py-2 text-white rounded-lg transition-colors ${
+                                isProcessing
+                                  ? 'bg-gray-400 cursor-not-allowed'
+                                  : 'bg-blue-600 hover:bg-blue-700'
+                              }`}
+                            >
+                              Bid
+                            </button>
+                          </div>
+                        )
+                      }
+                      
+                      return (
                         <button
                           onClick={() => handleGenerateBid(project)}
-                          disabled={isProposalProcessing(project.id)}
-                          className={`px-4 py-2 text-white rounded-lg transition-colors ${
-                            isProposalProcessing(project.id)
+                          disabled={isProcessing || isFetching}
+                          className={`px-4 py-2 text-white rounded-lg transition-colors flex items-center gap-2 ${
+                            isProcessing || isFetching
                               ? 'bg-gray-400 cursor-not-allowed'
                               : 'bg-blue-600 hover:bg-blue-700'
                           }`}
                         >
-                          {isProposalProcessing(project.id) ? 'Processing...' : 'Generate Bid'}
+                          {isProcessing ? (
+                            'Processing...'
+                          ) : isFetching ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              Fetching details...
+                            </>
+                          ) : (
+                            'Generate Bid'
+                          )}
                         </button>
                       )
                     })()}
                   </div>
                 </div>
 
-                {/* Client Information - 1/4 width */}
-                {(() => {
-                  const clientInfo = getClientInfo(project)
-                  if (!clientInfo) return null
-                  
-                  return (
-                    <div className="w-64 flex-shrink-0 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                      <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Client Details</h4>
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                          {clientInfo.avatar ? (
-                            <img 
-                              src={clientInfo.avatar} 
-                              alt="Client" 
-                              className="w-12 h-12 rounded-full"
-                              onError={(e) => {
-                                e.target.style.display = 'none'
-                                e.target.nextSibling.style.display = 'flex'
-                              }}
-                            />
-                          ) : null}
-                          <div className="w-12 h-12 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center" style={{display: clientInfo.avatar ? 'none' : 'flex'}}>
-                            <User className="w-6 h-6 text-gray-500" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                              {clientInfo.name}
-                            </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              {clientInfo.countryCode ? (
-                                <ReactCountryFlag 
-                                  countryCode={clientInfo.countryCode} 
-                                  svg 
-                                  style={{
-                                    width: '16px',
-                                    height: '12px',
-                                  }}
-                                  title={clientInfo.country}
-                                />
-                              ) : (
-                                <div className="w-4 h-3 bg-gray-300 dark:bg-gray-600 rounded-sm flex items-center justify-center">
-                                  <span className="text-xs text-gray-500">?</span>
-                                </div>
-                              )}
-                              <span className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                                {clientInfo.city ? `${clientInfo.city}, ${clientInfo.country}` : clientInfo.country}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2 text-sm">
-                          {/* Rating with stars and review count */}
-                          <div className="space-y-1">
-                            {clientInfo.rating > 0 ? (
-                              <div className="flex items-center gap-2">
-                                <StarRating 
-                                  rating={clientInfo.rating} 
-                                  size="w-3 h-3" 
-                                  showValue={true}
-                                />
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                <div className="flex items-center">
-                                  {[...Array(5)].map((_, i) => (
-                                    <Star key={i} className="w-3 h-3 text-gray-300 fill-current" />
-                                  ))}
-                                </div>
-                                <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">No rating</span>
-                              </div>
-                            )}
-                            
-                            {clientInfo.reviewCount > 0 && (
-                              <div className="text-gray-600 dark:text-gray-400">
-                                {clientInfo.reviewCount} review{clientInfo.reviewCount !== 1 ? 's' : ''}
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* Completion stats */}
-                          {(clientInfo.completionRate !== null || clientInfo.onTimeRate !== null || clientInfo.onBudgetRate !== null) && (
-                            <div className="space-y-1">
-                              {clientInfo.completionRate !== null && (
-                                <div className="text-gray-600 dark:text-gray-400">
-                                  {Math.round(clientInfo.completionRate * 100)}% completion rate
-                                </div>
-                              )}
-                              {clientInfo.onTimeRate !== null && (
-                                <div className="text-gray-600 dark:text-gray-400">
-                                  {Math.round(clientInfo.onTimeRate * 100)}% on time
-                                </div>
-                              )}
-                              {clientInfo.onBudgetRate !== null && (
-                                <div className="text-gray-600 dark:text-gray-400">
-                                  {Math.round(clientInfo.onBudgetRate * 100)}% on budget
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          {/* Verification badges */}
-                          <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
-                            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Client Verification</p>
-                            <div className="grid grid-cols-3 gap-2">
-                              {/* Identity Verification */}
-                              <div 
-                                className="flex items-center justify-center p-2 rounded-lg cursor-help transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                                title={clientInfo.isIdentityVerified ? "Identity verified - Client has verified their identity" : "Identity not verified - Client has not verified their identity"}
-                              >
-                                <UserCheck className={`w-4 h-4 ${clientInfo.isIdentityVerified ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`} />
-                              </div>
-                              
-                              {/* Payment Verification */}
-                              <div 
-                                className="flex items-center justify-center p-2 rounded-lg cursor-help transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                                title={clientInfo.isPaymentVerified ? "Payment verified - Client has verified their payment method" : "Payment not verified - Client has not verified their payment method"}
-                              >
-                                <Shield className={`w-4 h-4 ${clientInfo.isPaymentVerified ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`} />
-                              </div>
-                              
-                              {/* Deposit Made */}
-                              <div 
-                                className="flex items-center justify-center p-2 rounded-lg cursor-help transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                                title={clientInfo.isDepositMade ? "Deposit made - Client has made a deposit on their account" : "No deposit - Client has not made a deposit"}
-                              >
-                                <CreditCard className={`w-4 h-4 ${clientInfo.isDepositMade ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`} />
-                              </div>
-                              
-                              {/* Email Verification */}
-                              <div 
-                                className="flex items-center justify-center p-2 rounded-lg cursor-help transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                                title={clientInfo.isEmailVerified ? "Email verified - Client has verified their email address" : "Email not verified - Client has not verified their email address"}
-                              >
-                                <Mail className={`w-4 h-4 ${clientInfo.isEmailVerified ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`} />
-                              </div>
-                              
-                              {/* Profile Completed */}
-                              <div 
-                                className="flex items-center justify-center p-2 rounded-lg cursor-help transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                                title={clientInfo.isProfileCompleted ? "Profile completed - Client has completed their profile" : "Profile incomplete - Client has not completed their profile"}
-                              >
-                                <CheckCircle className={`w-4 h-4 ${clientInfo.isProfileCompleted ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`} />
-                              </div>
-                              
-                              {/* Phone Verification */}
-                              <div 
-                                className="flex items-center justify-center p-2 rounded-lg cursor-help transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                                title={clientInfo.isPhoneVerified ? "Phone verified - Client has verified their phone number" : "Phone not verified - Client has not verified their phone number"}
-                              >
-                                <Phone className={`w-4 h-4 ${clientInfo.isPhoneVerified ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`} />
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Member since */}
-                          {clientInfo.memberSince && (
-                            <div className="text-gray-600 dark:text-gray-400 pt-1 border-t border-gray-200 dark:border-gray-600">
-                              Member since {new Date(clientInfo.memberSince * 1000).getFullYear()}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })()}
+
               </div>
             </div>
           ))

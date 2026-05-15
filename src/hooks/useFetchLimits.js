@@ -1,10 +1,10 @@
-// Custom hook for managing fetch limits without excessive polling
+// Custom hook for managing fetch limits — uses persistent localStorage cache
 
 import { useState, useEffect, useCallback } from 'react'
-import { debouncedApiCalls } from '../utils/apiUtils'
+import { apiCache, invalidateCache } from '../utils/apiUtils'
 
 export function useFetchLimits() {
-  // Load cached limits immediately
+  // Load cached limits immediately from localStorage (instant, no network)
   const [limits, setLimits] = useState(() => ({
     upwork: {
       remaining: parseInt(localStorage.getItem('upworkRemaining') || '5'),
@@ -20,20 +20,17 @@ export function useFetchLimits() {
     }
   }))
 
-  // Load limits from server (only once on mount)
+  // Fetch from server (served from persistent cache if < 10 min old)
   useEffect(() => {
     const loadLimits = async () => {
-      const data = await debouncedApiCalls.fetchLimits()
+      const data = await apiCache.fetchLimits()
       if (data) {
-        const newLimits = {
+        setLimits({
           upwork: data.upwork,
           freelancer: data.freelancer,
           freelancer_plus: data.freelancer_plus
-        }
-        
-        setLimits(newLimits)
-        
-        // Cache in localStorage
+        })
+        // Keep individual keys in sync for other consumers
         localStorage.setItem('upworkRemaining', data.upwork.remaining.toString())
         localStorage.setItem('freelancerRemaining', data.freelancer.remaining.toString())
         localStorage.setItem('freelancerPlusRemaining', data.freelancer_plus.remaining.toString())
@@ -42,11 +39,10 @@ export function useFetchLimits() {
         localStorage.setItem('freelancerPlusLimit', data.freelancer_plus.daily_limit.toString())
       }
     }
-
     loadLimits()
   }, [])
 
-  // Update limits after a fetch operation
+  // Update limits after a fetch operation and bust the cache
   const updateLimits = useCallback((platform, newRemaining, newLimit) => {
     setLimits(prev => ({
       ...prev,
@@ -55,17 +51,16 @@ export function useFetchLimits() {
         limit: newLimit || prev[platform].limit
       }
     }))
-    
-    // Update localStorage
     localStorage.setItem(`${platform}Remaining`, newRemaining.toString())
-    if (newLimit) {
-      localStorage.setItem(`${platform}Limit`, newLimit.toString())
-    }
+    if (newLimit) localStorage.setItem(`${platform}Limit`, newLimit.toString())
+    // Bust cache so next mount re-fetches fresh limits
+    invalidateCache('fetchLimits')
   }, [])
 
-  // Refresh limits (use sparingly)
+  // Force re-fetch from server
   const refreshLimits = useCallback(async () => {
-    const data = await debouncedApiCalls.fetchLimits()
+    invalidateCache('fetchLimits')
+    const data = await apiCache.fetchLimits()
     if (data) {
       setLimits({
         upwork: data.upwork,
@@ -75,9 +70,5 @@ export function useFetchLimits() {
     }
   }, [])
 
-  return {
-    limits,
-    updateLimits,
-    refreshLimits
-  }
+  return { limits, updateLimits, refreshLimits }
 }

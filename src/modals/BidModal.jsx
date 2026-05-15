@@ -34,7 +34,9 @@ const BidModal = ({
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    const bidAmountNum = parseFloat(bidAmount)
+    const amountToUse = bidAmount || suggestedAmount
+    const bidAmountNum = parseFloat(amountToUse)
+    
     if (isNaN(bidAmountNum) || bidAmountNum <= 0) {
       setError('Please enter a valid bid amount')
       return
@@ -125,28 +127,30 @@ const BidModal = ({
               </div>
 
               {/* Suggested Amount */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Suggested Amount
-                </label>
-                <div className="flex items-center justify-between">
-                  <div className="text-lg font-semibold text-blue-600 dark:text-blue-400">
-                    ${suggestedAmount}
+              {suggestedAmount > 0 && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Suggested Amount
+                  </label>
+                  <div className="flex items-center justify-between">
+                    <div className="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                      {lead?.native_currency || '$'}{suggestedAmount}
+                    </div>
+                    <button
+                      onClick={() => setBidAmount(suggestedAmount?.toString() || '')}
+                      className="px-3 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                    >
+                      Use This Amount
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setBidAmount(suggestedAmount?.toString() || '')}
-                    className="px-3 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
-                  >
-                    Use This Amount
-                  </button>
                 </div>
-              </div>
+              )}
 
               {/* Manual Bid Amount Input */}
               <form onSubmit={handleSubmit}>
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Your Bid Amount ($)
+                    Your Bid Amount ({lead?.native_currency || '$'})
                   </label>
                   <input
                     type="number"
@@ -155,12 +159,13 @@ const BidModal = ({
                     min="1"
                     step="0.01"
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 dark:focus:ring-blue-700 bg-white dark:bg-[#1f1f1f] text-gray-900 dark:text-gray-300"
-                    placeholder="Enter bid amount"
+                    placeholder={suggestedAmount > 0 ? `Enter amount (default: ${suggestedAmount})` : "Enter bid amount"}
                     autoFocus
-                    required
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Enter the amount you want to bid for this project
+                    {suggestedAmount > 0 
+                      ? "Enter the amount you want to bid. Leave blank to use suggested amount."
+                      : "Enter the amount you want to bid for this project."}
                   </p>
                 </div>
 
@@ -175,11 +180,10 @@ const BidModal = ({
                   </button>
                   <button
                     type="submit"
-                    disabled={!bidAmount || parseFloat(bidAmount) <= 0}
                     className="flex-1 px-4 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     <Send size={16} />
-                    Place Bid (${bidAmount})
+                    Place Bid {(bidAmount || suggestedAmount) > 0 ? `(${lead?.native_currency || '$'}${bidAmount || suggestedAmount})` : ''}
                   </button>
                 </div>
               </form>
@@ -211,7 +215,7 @@ const BidModal = ({
                 Placing Your Bid
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Submitting bid of ${bidAmount} to {lead?.platform || 'Freelancer'}...
+                Submitting bid of {lead?.native_currency || '$'}{bidAmount} to {lead?.platform || 'Freelancer'}...
               </p>
             </div>
           )}
@@ -226,7 +230,7 @@ const BidModal = ({
                 Bid Placed Successfully!
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Your bid of ${bidAmount} has been submitted to {lead?.platform || 'Freelancer'}.
+                Your bid of {lead?.native_currency || '$'}{bidAmount} has been submitted to {lead?.platform || 'Freelancer'}.
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Modal will close automatically in 5 seconds...

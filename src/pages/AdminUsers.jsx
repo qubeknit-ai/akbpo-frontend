@@ -1,169 +1,83 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Search, Edit2, Trash2, Shield, User, Filter, ArrowUpDown, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { logError } from '../utils/logger'
+import { apiCache, getCached, invalidateCache } from '../utils/apiUtils'
 import EditUserModal from '../modals/EditUserModal'
 import DeleteUserModal from '../modals/DeleteUserModal'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const AdminUsers = () => {
+  // PERFORMANCE: Load from persistent cache immediately (instant load)
   const [users, setUsers] = useState(() => {
-    // PERFORMANCE: Load from cache immediately
-    const cached = sessionStorage.getItem('adminUsers')
-    if (cached) {
-      try {
-        return JSON.parse(cached)
-      } catch (e) {
-        return []
-      }
-    }
-    return []
+    const cached = getCached('adminUsers')
+    return cached?.users || []
   })
-  const [loading, setLoading] = useState(true)
+  
+  const [loading, setLoading] = useState(!users.length)
   const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState(() => {
-    const cached = sessionStorage.getItem('adminUsersTimestamp')
-    return cached ? new Date(parseInt(cached)) : null
+    // Try to get timestamp from cache metadata
+    try {
+      const raw = localStorage.getItem('apicache__adminUsers')
+      if (raw) return new Date(JSON.parse(raw).timestamp)
+    } catch (e) {}
+    return null
   })
+  
   const [searchTerm, setSearchTerm] = useState('')
   const [editingUser, setEditingUser] = useState(null)
   const [showEditModal, setShowEditModal] = useState(false)
   const [deletingUser, setDeletingUser] = useState(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   
+  const isInitialMount = useRef(true)
+  
   // Filtering and sorting states
   const [roleFilter, setRoleFilter] = useState('all')
   const [sortBy, setSortBy] = useState('email')
   
-  // PERFORMANCE: Load system limits from cache
-  const [systemLimits] = useState(() => {
-    const cached = sessionStorage.getItem('systemLimits')
-    if (cached) {
-      try {
-        return JSON.parse(cached)
-      } catch (e) {
-        return { upwork: 5, freelancer: 5, freelancer_plus: 3 }
-      }
-    }
-    return { upwork: 5, freelancer: 5, freelancer_plus: 3 }
-  })
 
-  // PERFORMANCE: Memoize expensive operations
+  // PERFORMANCE: Memoize helper
   const normalizeStatus = useCallback((status = '') => {
     if (status === null || status === undefined) return ''
     return status.toString().trim().toLowerCase()
   }, [])
 
-  const getAdminLeadsForCounts = useCallback(async (headers) => {
-    const cached = sessionStorage.getItem('adminLeadsData')
-    const timestamp = sessionStorage.getItem('adminLeadsTimestamp')
-    const cacheAge = timestamp ? Date.now() - parseInt(timestamp) : Infinity
-    
-    // PERFORMANCE: Use 5-minute cache instead of 2 minutes
-    if (cached && cacheAge < 300000) {
-      try {
-        return JSON.parse(cached)
-      } catch (error) {
-        logError('Failed to parse cached admin leads', error)
-      }
-    }
-
-    if (!headers) {
-      return []
-    }
-
+  const loadUsers = useCallback(async (force = false) => {
     try {
-      const response = await fetch(`${API_URL}/api/admin/leads`, { headers })
-      if (response.ok) {
-        const payload = await response.json()
-        const leads = payload.leads || []
-        sessionStorage.setItem('adminLeadsData', JSON.stringify(leads))
-        sessionStorage.setItem('adminLeadsTimestamp', Date.now().toString())
-        return leads
-      }
-      logError('Failed to fetch admin leads', response.status)
-    } catch (error) {
-      logError('Error fetching admin leads', error)
-    }
-
-    if (cached) {
-      try {
-        return JSON.parse(cached)
-      } catch (error) {
-        logError('Failed to parse fallback admin leads cache', error)
-      }
-    }
-
-    return []
-  }, [])
-
-  useEffect(() => {
-    loadUsers()
-    
-    // PERFORMANCE: Increase auto-refresh to 60 seconds (was 30)
-    const interval = setInterval(() => {
-      loadUsers(true)
-    }, 60000)
-    
-    return () => clearInterval(interval)
-  }, [])
-
-  const loadUsers = useCallback(async (isBackgroundSync = false) => {
-    try {
-      if (!isBackgroundSync) {
-        setLoading(true)
-      } else {
-        setSyncing(true)
-      }
+      if (force) invalidateCache('adminUsers')
       
-      const token = localStorage.getItem('token')
+      setSyncing(true)
+      const data = await apiCache.fetchAdminUsers()
       
-      // PERFORMANCE: Use 5-minute cache instead of 2 minutes
-      const cacheTimestamp = sessionStorage.getItem('adminUsersTimestamp')
-      const cacheAge = cacheTimestamp ? Date.now() - parseInt(cacheTimestamp) : Infinity
-      
-      if (cacheAge < 300000 && users.length > 0 && !isBackgroundSync) {
-        setLoading(false)
-        return
-      }
-
-      const headers = { 'Authorization': `Bearer ${token}` }
-      const response = await fetch(`${API_URL}/api/admin/users`, { headers })
-
-      if (response.ok) {
-        const data = await response.json()
-        const adminLeads = await getAdminLeadsForCounts(headers)
-        
-        // PERFORMANCE: Use Map for O(1) lookup instead of reduce
-        const approvedCounts = new Map()
-        for (const lead of adminLeads) {
-          if (normalizeStatus(lead.status) === 'approved') {
-            approvedCounts.set(lead.user_id, (approvedCounts.get(lead.user_id) || 0) + 1)
-          }
-        }
-
-        const enrichedUsers = data.users.map((user) => ({
-          ...user,
-          approved_leads_count: approvedCounts.get(user.id) ?? user.approved_leads_count ?? 0
-        }))
-
-        setUsers(enrichedUsers)
-        const now = Date.now()
-        sessionStorage.setItem('adminUsers', JSON.stringify(enrichedUsers))
-        sessionStorage.setItem('adminUsersTimestamp', now.toString())
-        setLastSync(new Date(now))
+      if (data && data.users) {
+        setUsers(data.users)
+        setLastSync(new Date())
       }
     } catch (error) {
-      logError('Failed to load users', error)
-      if (!isBackgroundSync) {
-        toast.error('Load On server Plz try again Later')
-      }
+      logError('Failed to load admin users', error)
+      toast.error('Failed to sync users')
     } finally {
       setLoading(false)
       setSyncing(false)
     }
-  }, [users.length, getAdminLeadsForCounts, normalizeStatus])
+  }, [])
+
+  useEffect(() => {
+    // Only show full-page loading if we have NO cached data
+    if (!users.length) {
+      setLoading(true)
+    }
+    
+    loadUsers()
+    
+    // Auto-refresh in background every 5 minutes (persistent cache handles reload)
+    const interval = setInterval(() => loadUsers(true), 300000)
+    return () => clearInterval(interval)
+  }, [loadUsers])
+
 
   const handleEditUser = useCallback((user) => {
     setEditingUser({ ...user })
@@ -187,9 +101,7 @@ const AdminUsers = () => {
       if (response.ok) {
         toast.success('User updated successfully')
         setShowEditModal(false)
-        sessionStorage.removeItem('adminUsers')
-        sessionStorage.removeItem('adminUsersTimestamp')
-        loadUsers()
+        loadUsers(true) // Force background refresh
       } else {
         toast.error('Failed to update user')
       }
@@ -218,9 +130,7 @@ const AdminUsers = () => {
         toast.success('User deleted successfully')
         setShowDeleteModal(false)
         setDeletingUser(null)
-        sessionStorage.removeItem('adminUsers')
-        sessionStorage.removeItem('adminUsersTimestamp')
-        loadUsers()
+        loadUsers(true) // Force background refresh
       } else {
         toast.error('Failed to delete user')
       }

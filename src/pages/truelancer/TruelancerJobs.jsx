@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ExternalLink, DollarSign, Clock, Users, RefreshCw, AlertCircle, RotateCcw, User, Search, ChevronDown, ChevronUp, Star, Shield, CreditCard, Mail, Phone, UserCheck, CheckCircle, Zap, FileText, FolderOpen } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { logError } from '../../utils/logger'
+import { apiCache, invalidateCache } from '../../utils/apiUtils'
 import BidModal from '../../modals/BidModal'
 import gif from '../../assets/gif.gif'
 
@@ -18,6 +19,9 @@ const TruelancerJobs = () => {
   const [showBidModal, setShowBidModal] = useState(false)
   const [selectedProject, setSelectedProject] = useState(null)
   const [suggestedBidAmount, setSuggestedBidAmount] = useState(0)
+  const [enrichedData, setEnrichedData] = useState({}) // { projectId: { native_budget, native_currency } }
+  const [isEnriching, setIsEnriching] = useState(false)
+  const [currentlyEnrichingId, setCurrentlyEnrichingId] = useState(null)
 
   useEffect(() => {
     // Load generated proposals from cookies
@@ -69,21 +73,16 @@ const TruelancerJobs = () => {
   }
 
   const checkConnection = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/api/truelancer/status`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setConnectionStatus(data.connected ? 'connected' : 'disconnected')
-      } else {
-        setConnectionStatus('disconnected')
-      }
-    } catch {
+    // Served from localStorage cache (5 min TTL) — no network on reload
+    const data = await apiCache.fetchTruelancerStatus()
+    if (data !== null) {
+      const status = data.connected ? 'connected' : 'disconnected'
+      setConnectionStatus(status)
+    } else {
       setConnectionStatus('disconnected')
     }
   }
+
 
   const loadProjects = async (force = false) => {
     if (connectionStatus !== 'connected') return
@@ -108,14 +107,63 @@ const TruelancerJobs = () => {
       }
 
       const data = await response.json()
+      console.log("📡 [TRUELANCER] Recommended Jobs API Data:", data)
+      if (data.projects && data.projects.length > 0) {
+        console.log("🔍 [TRUELANCER] First Project Full Object:", data.projects[0])
+        console.log("💰 [TRUELANCER] Budget Fields:", {
+          budget: data.projects[0].budget,
+          currency: data.projects[0].currency,
+          currency_code: data.projects[0].currency_code,
+          currency_symbol: data.projects[0].currency_symbol,
+          job_currency: data.projects[0].job_currency,
+          native_currency: data.projects[0].native_currency
+        })
+      }
       setProjects(data.projects || [])
       setLastLoadTime(Date.now())
+      
+      // Start enriching projects one by one
+      if (data.projects && data.projects.length > 0) {
+        enrichProjectsSequentially(data.projects)
+      }
     } catch (error) {
       logError('Failed to load Truelancer jobs', error)
       toast.error('Failed to load jobs: ' + error.message)
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const enrichProjectsSequentially = async (projectList) => {
+    setIsEnriching(true)
+    const token = localStorage.getItem('token')
+    
+    for (const project of projectList) {
+      setCurrentlyEnrichingId(project.id)
+      try {
+        const response = await fetch(`${API_URL}/api/truelancer/project-native-budget?id=${project.id}&slug=${project.slug}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success) {
+            setEnrichedData(prev => ({
+              ...prev,
+              [project.id]: {
+                budget: data.native_budget,
+                currency: data.native_currency
+              }
+            }))
+          }
+        }
+      } catch (e) {
+        console.error(`Failed to enrich project ${project.id}:`, e)
+      }
+      setCurrentlyEnrichingId(null)
+      // Small delay to prevent hammering
+      await new Promise(r => setTimeout(r, 500))
+    }
+    setIsEnriching(false)
   }
 
   const handleGenerateBid = async (project) => {
@@ -151,7 +199,20 @@ const TruelancerJobs = () => {
       }
 
       const data = await genResponse.json()
-      const proposalText = data.data?.proposal || data.proposal
+
+      // Handle both object and array responses from n8n
+      let proposalText = ''
+      if (Array.isArray(data)) {
+        proposalText = data[0]?.proposal || data[0]?.Proposal || ''
+      } else if (data.data) {
+        proposalText = data.data.proposal || data.data.Proposal || ''
+      } else {
+        proposalText = data.proposal || data.Proposal || ''
+      }
+
+      if (!proposalText) {
+        console.warn('⚠️ No proposal text found in AI response:', data)
+      }
 
       // Create a lead entry in the database
       const leadData = {
@@ -196,41 +257,86 @@ const TruelancerJobs = () => {
     const loadingToast = toast.loading('Loading proposal...')
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/api/leads?platform=Truelancer&limit=50`, {
+      const response = await fetch(`${API_URL}/api/leads?platform=Truelancer&limit=500`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
+
+      let existingLead = null;
+      // Get all possible URL variations from the project object
+      const possibleUrls = [
+        project.link,
+        project.url,
+        project.slug ? `https://www.truelancer.com/freelance-project/${project.slug}` : null,
+        project.slug ? `https://truelancer.com/freelance-project/${project.slug}` : null
+      ].filter(Boolean)
 
       if (response.ok) {
         const data = await response.json()
         const leads = data.leads || []
 
-        // Match by title (primary) or by checking if project ID/slug is in the URL
-        const existingLead = leads.find(l => {
-          const titleMatch = l.title === project.title
-          const idInUrl = l.url && (l.url.includes(String(project.id)) || (project.slug && l.url.includes(project.slug)))
-          return titleMatch || idInUrl
+        // Clean all possible project URLs for comparison
+        const cleanProjectUrls = possibleUrls.map(u => u.replace(/^https?:\/\/(www\.)?/, '').toLowerCase().trim())
+
+        // Match primarily by URL
+        existingLead = leads.find(l => {
+          if (!l.url) return false
+          const cleanLUrl = l.url.replace(/^https?:\/\/(www\.)?/, '').toLowerCase().trim()
+
+          // Check if any variation of the project URL matches the lead URL
+          return cleanProjectUrls.some(cleanPUrl =>
+            cleanLUrl === cleanPUrl ||
+            cleanLUrl.includes(cleanPUrl) ||
+            cleanPUrl.includes(cleanLUrl)
+          )
         })
 
         if (existingLead) {
+          console.log('✅ [VIEW] Found Match in DB:', existingLead.url || existingLead.title)
           localStorage.setItem('editingLead', JSON.stringify({
             ...existingLead,
             project_id: project.id,
-            Proposal: existingLead.proposal || existingLead.description
+            proposal: existingLead.proposal || existingLead.Proposal || existingLead.description,
+            Proposal: existingLead.proposal || existingLead.Proposal || existingLead.description // Backward compatibility
           }))
           toast.success('Proposal loaded!', { id: loadingToast })
           window.dispatchEvent(new CustomEvent('navigateToProposals'))
           return
         }
       }
-      throw new Error('Could not find the generated proposal.')
+
+      // FALLBACK: If no existing lead found, create a new lead data structure (mirroring Freelancer pattern)
+      console.log('⚠️ [VIEW] No existing lead found in DB, creating fallback lead data for project:', project.id)
+
+      const leadData = {
+        id: project.id,
+        project_id: project.id,
+        platform: 'Truelancer',
+        title: project.title || 'UNTITLED_PROJECT',
+        description: project.description || 'NO_DESCRIPTION_AVAILABLE',
+        budget: `${project.currency_symbol || '$'}${project.budget}`,
+        posted: project.created_at ? new Date(project.created_at).toLocaleDateString() : 'Recently',
+        posted_time: project.created_at || new Date().toISOString(),
+        status: 'AI Drafted',
+        score: '8',
+        url: projectUrl,
+        proposal: 'Proposal will be generated when you open the Proposals page...',
+        Proposal: 'Proposal will be generated when you open the Proposals page...', // Placeholder
+        project_type: project.jobtype == 3 ? 'Hourly' : 'Fixed'
+      }
+
+      localStorage.setItem('editingLead', JSON.stringify(leadData))
+      toast.success('Opening proposal editor...', { id: loadingToast })
+      window.dispatchEvent(new CustomEvent('navigateToProposals'))
+
     } catch (error) {
       toast.error(error.message, { id: loadingToast })
     }
   }
 
   const handleBidOnProject = (project) => {
+    const enriched = enrichedData[project.id]
     setSelectedProject(project)
-    setSuggestedBidAmount(project.budget || 500)
+    setSuggestedBidAmount(enriched ? enriched.budget : (project.budget || 500))
     setShowBidModal(true)
   }
 
@@ -241,19 +347,43 @@ const TruelancerJobs = () => {
 
     let proposalText = ''
     try {
-      const response = await fetch(`${API_URL}/api/leads?platform=Truelancer&limit=50`, {
+      const response = await fetch(`${API_URL}/api/leads?platform=Truelancer&limit=500`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
+
       if (response.ok) {
         const data = await response.json()
+
+        // Get all possible URL variations from the project object
+        const possibleUrls = [
+          selectedProject.link,
+          selectedProject.url,
+          selectedProject.slug ? `https://www.truelancer.com/freelance-project/${selectedProject.slug}` : null,
+          selectedProject.slug ? `https://truelancer.com/freelance-project/${selectedProject.slug}` : null
+        ].filter(Boolean)
+
+        const cleanProjectUrls = possibleUrls.map(u => u.replace(/^https?:\/\/(www\.)?/, '').toLowerCase().trim())
+
         const existingLead = (data.leads || []).find(l => {
-          const titleMatch = l.title === selectedProject.title
-          const idInUrl = l.url && (l.url.includes(String(selectedProject.id)) || (selectedProject.slug && l.url.includes(selectedProject.slug)))
-          return titleMatch || idInUrl
+          if (!l.url) return false
+          const cleanLUrl = l.url.replace(/^https?:\/\/(www\.)?/, '').toLowerCase().trim()
+
+          return cleanProjectUrls.some(cleanPUrl =>
+            cleanLUrl === cleanPUrl ||
+            cleanLUrl.includes(cleanPUrl) ||
+            cleanPUrl.includes(cleanLUrl)
+          )
         })
-        proposalText = existingLead?.proposal || existingLead?.description || 'I am interested in this project.'
+
+        proposalText = existingLead?.proposal || existingLead?.Proposal || existingLead?.description
+
+        if (!proposalText || proposalText.length < 100) {
+          console.log('⚠️ [BID] No valid proposal text found in DB, using professional fallback');
+          proposalText = `I am very interested in your project: "${selectedProject.title}". I have the relevant skills and experience to deliver high-quality results for you. I would welcome the opportunity to discuss your requirements in more detail and demonstrate how I can help you achieve your goals successfully. Thank you for your consideration.`
+        }
       }
     } catch (e) {
+      console.log('❌ [BID] Error fetching proposal from DB, using default');
       proposalText = 'I am interested in this project.'
     }
 
@@ -269,7 +399,7 @@ const TruelancerJobs = () => {
         project_url: selectedProject.link || `https://www.truelancer.com/freelance-project/${selectedProject.slug}`,
         amount: manualAmount,
         description: proposalText,
-        currency: selectedProject.currency_code || 'USD'
+        currency: selectedProject.currency || selectedProject.currency_code || 'USD'
       })
     })
 
@@ -320,7 +450,7 @@ const TruelancerJobs = () => {
 
       {isLoading ? (
         <div className="flex flex-col items-center justify-center h-64">
-          <img src={gif} alt="Loading" className="w-16 h-16 mb-4" />
+          <img src={gif} alt="Loading" className="w-12 h-12 mb-4" />
           <p className="text-gray-500 animate-pulse">Scanning for recommended jobs...</p>
         </div>
       ) : projects.length === 0 ? (
@@ -333,7 +463,8 @@ const TruelancerJobs = () => {
             const isExpanded = expandedDescriptions.has(project.id)
             const isProcessing = processingProposals.has(project.id.toString())
             const isGenerated = generatedProposals.has(project.id.toString())
-            const symbol = project.currency_symbol || (project.currency_code === 'INR' ? '₹' : '$')
+            // Prioritize USD symbol if currency is USD, even if native code is INR
+            const symbol = project.currency === 'USD' ? '$' : (project.currency_symbol || (project.currency_code === 'INR' ? '₹' : '$'))
 
             return (
               <div key={project.id} className="bg-white dark:bg-[#1f1f1f] rounded-lg border border-gray-200 dark:border-gray-700 p-6">
@@ -368,14 +499,23 @@ const TruelancerJobs = () => {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div>
                         <p className="text-sm text-gray-600 dark:text-gray-400">Budget</p>
-                        <div className="flex items-center gap-2">
-                          <DollarSign className="w-4 h-4 text-green-600" />
-                          <span className="font-semibold text-gray-900 dark:text-gray-100">
-                            {symbol}{project.budget}
-                          </span>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${project.jobtype == 3 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' : 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'}`}>
-                            {project.jobtype == 3 ? 'Hourly' : 'Fixed'}
-                          </span>
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <DollarSign className="w-4 h-4 text-green-600" />
+                            <span className="font-semibold text-gray-900 dark:text-gray-100">
+                              {symbol}{project.budget}
+                            </span>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${project.jobtype == 3 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300' : 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'}`}>
+                              {project.jobtype == 3 ? 'Hourly' : 'Fixed'}
+                            </span>
+                          </div>
+                          {enrichedData[project.id] ? (
+                            <div className="text-xs font-bold text-orange-600 dark:text-orange-400 mt-1">
+                              Real: {enrichedData[project.id].currency} {enrichedData[project.id].budget}
+                            </div>
+                          ) : isEnriching ? (
+                            <div className="text-[10px] text-gray-400 animate-pulse mt-1">Fetching real currency...</div>
+                          ) : null}
                         </div>
                       </div>
 
@@ -454,10 +594,16 @@ const TruelancerJobs = () => {
                       ) : (
                         <button
                           onClick={() => handleGenerateBid(project)}
-                          disabled={isProcessing}
-                          className={`px-4 py-2 text-white rounded-lg transition-colors ${isProcessing ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                          disabled={isProcessing || !enrichedData[project.id]}
+                          className={`px-4 py-2 text-white rounded-lg transition-colors ${
+                            (isProcessing || !enrichedData[project.id]) 
+                              ? 'bg-gray-400 cursor-not-allowed' 
+                              : 'bg-blue-600 hover:bg-blue-700'
+                          }`}
                         >
-                          {isProcessing ? 'Processing...' : 'Generate Bid'}
+                          {isProcessing ? 'Processing...' : 
+                           currentlyEnrichingId === project.id ? 'Fetching...' :
+                           enrichedData[project.id] ? 'Generate Bid' : 'Waiting...'}
                         </button>
                       )}
                     </div>
@@ -480,8 +626,13 @@ const TruelancerJobs = () => {
         lead={selectedProject ? {
           ...selectedProject,
           platform: 'Truelancer',
-          budget: `${selectedProject.currency_symbol || '$'}${selectedProject.budget}`,
-          url: selectedProject.link || `https://www.truelancer.com/freelance-project/${selectedProject.slug}`
+          budget: enrichedData[selectedProject.id] 
+            ? `${enrichedData[selectedProject.id].currency}${enrichedData[selectedProject.id].budget}`
+            : `${selectedProject.currency === 'USD' ? '$' : (selectedProject.currency_symbol || (selectedProject.currency_code === 'INR' ? '₹' : '$'))}${selectedProject.budget}`,
+          url: selectedProject.link || `https://www.truelancer.com/freelance-project/${selectedProject.slug}`,
+          // Pass native info for modal to use
+          native_currency: enrichedData[selectedProject.id]?.currency,
+          native_budget: enrichedData[selectedProject.id]?.budget
         } : null}
         suggestedAmount={suggestedBidAmount}
       />
