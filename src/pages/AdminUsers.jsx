@@ -36,7 +36,7 @@ const AdminUsers = () => {
   
   // Filtering and sorting states
   const [roleFilter, setRoleFilter] = useState('all')
-  const [sortBy, setSortBy] = useState('email')
+  const [sortBy, setSortBy] = useState('bids_today_desc')
   
 
   // PERFORMANCE: Memoize helper
