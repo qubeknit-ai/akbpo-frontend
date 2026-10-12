@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { logError } from '../utils/logger'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_BASE_URL = 'https://backend-testing-ashy.vercel.app'
 
 const EditTalentModal = ({ isOpen, onClose, onSuccess, talent }) => {
   const [formData, setFormData] = useState({

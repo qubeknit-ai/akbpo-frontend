@@ -3,7 +3,7 @@ import toast from 'react-hot-toast'
 import { DollarSign, TrendingUp, Briefcase, Plus, X, Edit2, Trash2, ExternalLink } from 'lucide-react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 const CRM = () => {
   const queryClient = useQueryClient()

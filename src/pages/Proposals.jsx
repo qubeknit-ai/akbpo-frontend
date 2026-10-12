@@ -95,7 +95,7 @@ const Proposals = () => {
 
   // Helper function to place bid with given data
   const placeBidWithData = async (bidData, loadingToast) => {
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const API_URL = 'https://backend-testing-ashy.vercel.app'
     
     // Get fresh credentials from extension
     const extCredentials = await getExtensionCredentials()
@@ -220,7 +220,7 @@ const Proposals = () => {
     setIsSaving(true)
     try {
       const token = localStorage.getItem('token')
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const API_URL = 'https://backend-testing-ashy.vercel.app'
       
       const requestBody = { 
         proposal,
@@ -281,7 +281,7 @@ const Proposals = () => {
 
       // First, approve the lead in the database
       const token = localStorage.getItem('token')
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const API_URL = 'https://backend-testing-ashy.vercel.app'
       
       const approveResponse = await fetch(`${API_URL}/api/leads/${lead.id}/approve`, {
         method: 'PUT',
@@ -505,7 +505,7 @@ const Proposals = () => {
 
     try {
       const token = localStorage.getItem('token')
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const API_URL = 'https://backend-testing-ashy.vercel.app'
       
       // Update status to Approved in database
       const response = await fetch(`${API_URL}/api/leads/${lead.id}/approve`, {
@@ -657,7 +657,7 @@ const Proposals = () => {
     
     try {
       const token = localStorage.getItem('token')
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const API_URL = 'https://backend-testing-ashy.vercel.app'
       
       const response = await fetch(`${API_URL}/api/chat`, {
         method: 'POST',

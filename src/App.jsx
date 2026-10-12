@@ -47,7 +47,7 @@ import freelancerSync from './utils/freelancerSync'
 import { clearApiCache } from './utils/apiUtils'
 
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 // Create a client for React Query with optimized settings
 const queryClient = new QueryClient({

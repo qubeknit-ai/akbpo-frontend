@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import { logError } from '../../utils/logger'
 import gif from '../../assets/gif.gif'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 const FreelancerSettings = () => {
   const [connectionStatus, setConnectionStatus] = useState('checking')

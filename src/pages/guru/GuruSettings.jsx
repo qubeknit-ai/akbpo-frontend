@@ -3,7 +3,7 @@ import { ExternalLink, RefreshCw, CheckCircle, XCircle, AlertCircle, Trash2, Sav
 import toast from 'react-hot-toast'
 import gif from '../../assets/gif.gif'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 const GURU_COLOR = '#f47c20'
 
 const GuruSettings = () => {

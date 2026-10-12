@@ -4,7 +4,7 @@ import { Users, Database, Zap, Clock, RefreshCw } from 'lucide-react'
 import { logError } from '../utils/logger'
 import { apiCache, getCached, invalidateCache } from '../utils/apiUtils'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 const AdminDashboard = () => {
   // PERFORMANCE: Load from persistent cache immediately

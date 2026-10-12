@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { FileText, RefreshCw, AlertCircle, CheckCircle, ExternalLink, Clock, XCircle, DollarSign, Hourglass, Play, Square, Settings, ChevronLeft, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 const TruelancerAutoBidLogs = () => {
     const [logs, setLogs] = useState(() => {

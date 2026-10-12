@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { FileText, RefreshCw, AlertCircle, CheckCircle, ExternalLink, Clock, XCircle, DollarSign, Hourglass, Play, Square, ChevronLeft, ChevronRight, Target } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 const GURU_COLOR = '#f47c20'
 
 const GuruAutoBid = () => {

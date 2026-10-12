@@ -4,7 +4,7 @@ import { Toaster } from 'react-hot-toast'
 import { showSingleToast } from '../utils/toastUtils'
 import icon from '../assets/icon.png'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 const ResetPassword = ({ token, onSuccess, onBackToLogin }) => {
   const [password, setPassword] = useState('')

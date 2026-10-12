@@ -5,7 +5,7 @@ import LeadsGrouped from '../components/LeadsGrouped'
 import { logError, logWarn } from '../utils/logger'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 const Leads = ({ refreshTrigger = 0 }) => {
   const [searchTerm, setSearchTerm] = useState('')

@@ -92,7 +92,7 @@ index 0000000..3fd0962
 +import { showSingleToast } from '../utils/toastUtils'
 +import icon from '../assets/icon.png'
 +
-+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
++const API_URL = 'https://backend-testing-ashy.vercel.app'
 +
 +const ForgotPassword = ({ onBackToLogin }) => {
 +  const [email, setEmail] = useState('')
@@ -201,7 +201,7 @@ index 629d338..68a8374 100644
 +++ b/src/pages/Login.jsx
 @@ -7,7 +7,7 @@ import icon from '../assets/icon.png'
  
- const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+ const API_URL = 'https://backend-testing-ashy.vercel.app'
  
 -const Login = ({ onLoginSuccess, onSwitchToSignup }) => {
 +const Login = ({ onLoginSuccess, onSwitchToSignup, onForgotPassword }) => {
@@ -234,7 +234,7 @@ index 0000000..b159d95
 +import { showSingleToast } from '../utils/toastUtils'
 +import icon from '../assets/icon.png'
 +
-+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
++const API_URL = 'https://backend-testing-ashy.vercel.app'
 +
 +const ResetPassword = ({ token, onSuccess, onBackToLogin }) => {
 +  const [password, setPassword] = useState('')

@@ -1,5 +1,5 @@
 // Freelancer credentials sync utility
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = 'https://backend-testing-ashy.vercel.app';
 
 class FreelancerSync {
   constructor() {

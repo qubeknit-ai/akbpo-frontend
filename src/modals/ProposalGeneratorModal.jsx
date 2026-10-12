@@ -40,7 +40,7 @@ const ProposalGeneratorModal = ({
         throw new Error('Please log in to generate proposals')
       }
       
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const API_URL = 'https://backend-testing-ashy.vercel.app'
       
       const response = await fetch(`${API_URL}/api/proposal/generate`, {
         method: 'POST',

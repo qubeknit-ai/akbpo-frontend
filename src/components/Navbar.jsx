@@ -7,7 +7,7 @@ import { logDebug, logError } from '../utils/logger'
 import { useFetchLimits } from '../hooks/useFetchLimits'
 import { apiCache, getCached, invalidateCache } from '../utils/apiUtils'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 const Navbar = ({ onSyncComplete, pageTitle, pageDescription }) => {
   const [isSyncing, setIsSyncing] = useState(false)

@@ -5,7 +5,7 @@ import { showSingleToast } from '../utils/toastUtils'
 import { apiCache, invalidateCache } from '../utils/apiUtils'
 import { logError } from '../utils/logger'
 import gif from '../assets/gif.gif'
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 const UPWORK_CATEGORIES = [
   "Accounting & Bookkeeping",

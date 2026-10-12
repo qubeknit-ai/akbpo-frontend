@@ -6,7 +6,7 @@ import { apiCache, getCached, invalidateCache } from '../utils/apiUtils'
 import EditUserModal from '../modals/EditUserModal'
 import DeleteUserModal from '../modals/DeleteUserModal'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 const AdminUsers = () => {
   // PERFORMANCE: Load from persistent cache immediately (instant load)

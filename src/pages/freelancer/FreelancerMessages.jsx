@@ -3,7 +3,7 @@ import { MessageSquare, Send, ArrowLeft, RefreshCw, AlertCircle, User, ChevronDo
 import toast from 'react-hot-toast'
 import { logError } from '../../utils/logger'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 const FreelancerMessages = () => {
   const [threads, setThreads] = useState([])

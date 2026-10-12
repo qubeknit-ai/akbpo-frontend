@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import logo from '../assets/logo-dark.png'
 import { logError } from '../utils/logger'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 const Sidebar = ({ currentPage, setCurrentPage, onLogout }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)

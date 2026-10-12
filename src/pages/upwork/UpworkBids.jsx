@@ -3,7 +3,7 @@ import { DollarSign, Clock, AlertCircle, RefreshCw, CheckCircle, XCircle, Hourgl
 import toast from 'react-hot-toast'
 import gif from '../../assets/gif.gif'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 const STATUS_CONFIG = {
   accepted: { icon: CheckCircle, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', label: 'Accepted' },

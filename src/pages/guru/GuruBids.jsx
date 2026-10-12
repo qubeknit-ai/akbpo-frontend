@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { RefreshCw, TrendingUp, CheckCircle, XCircle, Clock, Target, Award, ExternalLink } from 'lucide-react'
 import gif from '../../assets/gif.gif'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 const GURU_COLOR = '#f47c20'
 
 const STATUS_COLORS = {

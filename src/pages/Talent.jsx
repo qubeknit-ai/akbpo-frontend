@@ -1645,7 +1645,7 @@ const Talent = () => {
 
     try {
       const token = localStorage.getItem('token')
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const API_BASE_URL = 'https://backend-testing-ashy.vercel.app'
       
       const response = await fetch(`${API_BASE_URL}/api/talents/${talentToDelete.id}`, {
         method: 'DELETE',
@@ -1757,7 +1757,7 @@ const normalizeSavedTalentsStatic = (savedList) => {
   const saveTalent = async (talent) => {
     try {
       const token = localStorage.getItem('token')
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const API_BASE_URL = 'https://backend-testing-ashy.vercel.app'
       
       const response = await fetch(`${API_BASE_URL}/api/talents`, {
         method: 'POST',

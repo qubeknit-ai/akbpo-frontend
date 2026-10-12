@@ -1,6 +1,6 @@
 // API utilities — persistent cache (survives page reloads) + in-flight deduplication
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = 'https://backend-testing-ashy.vercel.app'
 
 // ─── Persistent Cache ────────────────────────────────────────────────────────
 // Stores parsed JSON + timestamp in localStorage so data survives page reloads.
